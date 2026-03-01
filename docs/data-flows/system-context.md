@@ -1,0 +1,130 @@
+---
+sidebar_position: 1
+title: System Context Diagram
+description: "C4 Level 1 — How E-AEGL fits into the enterprise landscape"
+---
+
+# System Context Diagram
+
+## C4 Level 1: System Context
+
+```
+                     ┌──────────────┐
+                     │   Regulator  │
+                     │  (OCC, EU,   │
+                     │   State DOI) │
+                     └──────┬───────┘
+                            │ Audit request
+                            │ (compliance reports)
+                            ▼
+┌──────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   AI Model   │    │                  │    │   Dashboard      │
+│   Provider   │    │    E - A E G L   │    │   Users          │
+│  (OpenAI,    │    │                  │    │  (Compliance,    │
+│  Anthropic,  │    │  AI Decision     │    │   Risk, Admin)   │
+│  open-source)│    │  Control         │    │                  │
+└──────┬───────┘    │  Infrastructure  │    └───────┬──────────┘
+       │            │                  │            │
+       │ AI output  │  ┌────────────┐  │  Dashboard │
+       ▼            │  │ Policy     │  │  UI        │
+┌──────────────┐    │  │ Engine     │  │            │
+│  Enterprise  │    │  ├────────────┤  │            │
+│  AI          │───→│  │ Audit      │  │←───────────┘
+│  Application │    │  │ Logger     │  │
+│  (with SDK)  │←───│  ├────────────┤  │
+│              │    │  │ Escalation │  │
+└──────────────┘    │  │ System     │  │
+                    │  └────────────┘  │
+                    │                  │
+                    └────────┬─────────┘
+                             │
+                    ┌────────┼──────────┐
+                    │        │          │
+                    ▼        ▼          ▼
+             ┌─────────┐ ┌──────┐ ┌────────┐
+             │PostgreSQL│ │Redis │ │Webhooks│
+             │(primary) │ │(cache│ │(Slack, │
+             │          │ │queue)│ │PagerDuty│
+             └─────────┘ └──────┘ │etc.)   │
+                                   └────────┘
+```
+
+## C4 Level 2: Container Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ E-AEGL Platform                                                          │
+│                                                                          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │
+│  │   API Server     │  │   Dashboard     │  │  Marketing       │         │
+│  │   (Express +     │  │   (Next.js 14 + │  │  Website         │         │
+│  │    TypeScript)    │  │    NextAuth)     │  │  (Next.js)       │         │
+│  │                   │  │                  │  │                  │         │
+│  │  Port: 4000       │  │  Port: 3001      │  │  Port: 3000      │         │
+│  │                   │  │                  │  │                  │         │
+│  │  ┌─────────────┐ │  │  Calls API       │  │                  │         │
+│  │  │ Decision    │ │  │  via HTTP         │  │                  │         │
+│  │  │ Pipeline    │ │  │                  │  │                  │         │
+│  │  ├─────────────┤ │  └─────────────────┘  └─────────────────┘         │
+│  │  │ Policy      │ │                                                    │
+│  │  │ Engine      │ │  ┌─────────────────┐  ┌─────────────────┐         │
+│  │  ├─────────────┤ │  │   SLA Worker    │  │ Webhook Worker  │         │
+│  │  │ Action Gate │ │  │   (BullMQ)      │  │ (BullMQ)        │         │
+│  │  ├─────────────┤ │  │                  │  │                  │         │
+│  │  │ Audit       │ │  │  Checks expired │  │  Delivers        │         │
+│  │  │ Logger      │ │  │  escalations    │  │  webhook events  │         │
+│  │  └─────────────┘ │  │  every 5 min    │  │  with retry      │         │
+│  │                   │  └─────────────────┘  └─────────────────┘         │
+│  └─────────────────┘                                                     │
+│           │                        │                   │                  │
+│           ▼                        ▼                   ▼                  │
+│  ┌─────────────────┐  ┌─────────────────┐                               │
+│  │  PostgreSQL 16   │  │    Redis 7       │                               │
+│  │                  │  │                  │                               │
+│  │  16 tables       │  │  BullMQ queues   │                               │
+│  │  Audit trail     │  │  Policy cache    │                               │
+│  │  All state       │  │  Session cache   │                               │
+│  └─────────────────┘  └─────────────────┘                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Data Flow: Decision Request
+
+```
+SDK (TypeScript/Python)
+    │
+    │  POST /v1/decisions
+    │  { actionType, actionPayload, context, agentId }
+    │
+    ▼
+API Server
+    │
+    ├──→ Auth middleware (SHA-256 key lookup → PostgreSQL)
+    │
+    ├──→ Policy Engine (fetch policies → PostgreSQL, evaluate in-memory)
+    │
+    ├──→ Action Gate (combine policy result + agent risk)
+    │
+    ├──→ Prisma Transaction → PostgreSQL
+    │    ├── Decision record
+    │    ├── PolicyEvaluation records
+    │    ├── Escalation record (if ESCALATED)
+    │    └── AuditLog record (hash-chained)
+    │
+    ├──→ Webhook queue → Redis (BullMQ) → Webhook Worker → External URLs
+    │
+    └──→ Response → SDK
+         { decision_id, trace_id, outcome, evaluations, latency_ms }
+```
+
+## Technology Boundaries
+
+| Boundary | Protocol | Authentication | Latency |
+|----------|----------|---------------|---------|
+| SDK → API | HTTPS / gRPC | Bearer API key | ~1ms (local), ~10ms (remote) |
+| API → PostgreSQL | TCP (libpq) | Connection string credentials | ~1ms |
+| API → Redis | TCP (RESP) | Connection string (optional auth) | ~0.5ms |
+| Dashboard → API | HTTPS | Session cookie (NextAuth) | ~10ms |
+| Webhook Worker → External | HTTPS | HMAC-SHA256 signature | Variable |
+| CLI → API | HTTPS | Bearer API key | ~10ms |
