@@ -12,15 +12,15 @@ All operational procedures for the E-AEGL platform. Each SOP includes purpose, s
 
 | SOP ID | Title | Category | Frequency | Criticality |
 |--------|-------|----------|-----------|-------------|
-| [SOP-001](./sop-001-incident-response) | Incident Response | Security | On incident | Critical |
-| [SOP-002](./sop-002-secrets-rotation) | Secrets Rotation | Security | Quarterly | High |
-| [SOP-003](./sop-003-database-backup) | Database Backup & Restore | Operations | Every 6h (auto) | Critical |
-| [SOP-004](./sop-004-deployment) | Production Deployment | Operations | Per release | High |
-| [SOP-005](./sop-005-audit-chain-repair) | Audit Chain Repair | Compliance | On detection | Critical |
-| [SOP-006](./sop-006-tenant-onboarding) | Tenant Onboarding | Customer | Per customer | Medium |
-| [SOP-007](./sop-007-escalation-sla-breach) | Escalation SLA Breach | Governance | On breach | High |
-| [SOP-008](./sop-008-capacity-planning) | Capacity Planning | Operations | Monthly | Medium |
-| [SOP-009](./sop-009-compliance-audit) | Compliance Audit Preparation | Compliance | Quarterly | High |
+| [SOP-001](./sops/sop-001-incident-response) | Incident Response | Security | On incident | Critical |
+| [SOP-002](./sops/sop-002-secrets-rotation) | Secrets Rotation | Security | Quarterly | High |
+| [SOP-003](./sops/sop-003-database-backup) | Database Backup & Restore | Operations | Every 6h (auto) | Critical |
+| [SOP-004](./sops/sop-004-deployment) | Production Deployment | Operations | Per release | High |
+| [SOP-005](./sops/sop-005-audit-chain-repair) | Audit Chain Repair | Compliance | On detection | Critical |
+| [SOP-006](./sops/sop-006-tenant-onboarding) | Tenant Onboarding | Customer | Per customer | Medium |
+| [SOP-007](./sops/sop-007-escalation-sla-breach) | Escalation SLA Breach | Governance | On breach | High |
+| [SOP-008](./sops/sop-008-capacity-planning) | Capacity Planning | Operations | Monthly | Medium |
+| [SOP-009](./sops/sop-009-compliance-audit) | Compliance Audit Preparation | Compliance | Quarterly | High |
 
 ## SOP Template
 
