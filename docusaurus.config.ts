@@ -11,13 +11,14 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://docs.aegl.io',
-  baseUrl: '/',
+  url: 'https://andrew-leo-2024.github.io',
+  baseUrl: '/aegl-docs/',
 
   organizationName: 'andrew-leo-2024',
   projectName: 'aegl-docs',
 
   onBrokenLinks: 'throw',
+  trailingSlash: false,
 
   i18n: {
     defaultLocale: 'en',
