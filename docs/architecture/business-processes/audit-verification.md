@@ -10,30 +10,21 @@ The audit verification process ensures the integrity of the decision audit trail
 
 ## Verification Process
 
-```
-START
-  │
-  ▼
-Load all audit blocks for organization
-(ordered by sequenceNumber ASC)
-  │
-  ▼
-For each block:
-  │
-  ├── Block 0: Compare previousHash to genesis hash
-  │   └── Mismatch → CHAIN BROKEN at block 0
-  │
-  ├── Block N: Compare previousHash to block[N-1].hash
-  │   └── Mismatch → CHAIN BROKEN at block N
-  │
-  └── Recompute hash from (data + previousHash + sequenceNumber)
-      └── Mismatch → DATA TAMPERED at block N
-  │
-  ▼
-All blocks verified
-  │
-  ▼
-Result: { valid: true, totalBlocks: N }
+```mermaid
+flowchart TD
+    START(["START"]) --> LOAD["Load all audit blocks\n(ordered by sequenceNumber ASC)"]
+    LOAD --> LOOP{"For each block"}
+    LOOP -->|"Block 0"| CHK0{"previousHash == genesis hash?"}
+    CHK0 -->|"Mismatch"| BROKEN0["CHAIN BROKEN at block 0"]
+    CHK0 -->|"Match"| REHASH0["Recompute hash"]
+    LOOP -->|"Block N"| CHKN{"previousHash == block[N-1].hash?"}
+    CHKN -->|"Mismatch"| BROKENN["CHAIN BROKEN at block N"]
+    CHKN -->|"Match"| REHASHN["Recompute hash\n(data + previousHash + sequenceNumber)"]
+    REHASH0 --> HASHCHK{"Computed hash == stored hash?"}
+    REHASHN --> HASHCHK
+    HASHCHK -->|"Mismatch"| TAMPERED["DATA TAMPERED at block N"]
+    HASHCHK -->|"Match"| LOOP
+    LOOP -->|"All verified"| RESULT["Result: valid: true, totalBlocks: N"]
 ```
 
 ## When to Verify

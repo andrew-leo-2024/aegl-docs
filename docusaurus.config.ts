@@ -20,10 +20,57 @@ const config: Config = {
   onBrokenLinks: 'throw',
   trailingSlash: false,
 
+  markdown: {
+    mermaid: true,
+  },
+
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  headTags: [
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:image',
+        content: 'https://andrew-leo-2024.github.io/aegl-docs/img/aegl-social-card.svg',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:type',
+        content: 'website',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:card',
+        content: 'summary_large_image',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:image',
+        content: 'https://andrew-leo-2024.github.io/aegl-docs/img/aegl-social-card.svg',
+      },
+    },
+  ],
+
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: true,
+        indexBlog: false,
+        docsRouteBasePath: '/docs',
+      },
+    ],
+  ],
 
   presets: [
     [
@@ -33,6 +80,14 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/andrew-leo-2024/aegl-docs/tree/main/',
           routeBasePath: 'docs',
+          showLastUpdateTime: true,
+          showLastUpdateAuthor: true,
+          lastVersion: 'current',
+          versions: {
+            current: {
+              label: 'Next',
+            },
+          },
         },
         blog: false,
         theme: {
@@ -46,6 +101,19 @@ const config: Config = {
     colorMode: {
       defaultMode: 'light',
       respectPrefersColorScheme: true,
+    },
+    announcementBar: {
+      id: 'announcement-launch',
+      content: '🛡️ <strong>E-AEGL Documentation is live!</strong> — AI Decision Control Infrastructure for regulated enterprises.',
+      backgroundColor: '#1a56db',
+      textColor: '#ffffff',
+      isCloseable: true,
+    },
+    mermaid: {
+      theme: {
+        light: 'neutral',
+        dark: 'dark',
+      },
     },
     navbar: {
       title: 'E-AEGL',
@@ -112,6 +180,10 @@ const config: Config = {
           sidebarId: 'referenceSidebar',
           position: 'left',
           label: 'Reference',
+        },
+        {
+          type: 'docsVersionDropdown',
+          position: 'right',
         },
         {
           href: 'https://github.com/frankmax-com/aegl',

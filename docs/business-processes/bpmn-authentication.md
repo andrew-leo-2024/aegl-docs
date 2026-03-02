@@ -15,94 +15,37 @@ description: "BPMN — API key authentication and RBAC permission enforcement"
 
 ## BPMN Diagram — Authentication
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: API Key Authentication (apiKeyAuth middleware)                          │
-│                                                                              │
-│  (O)──→[Extract Authorization]──→(X) Header present?                        │
-│        [header from request  ]    │                │                         │
-│                              [Missing/malformed]  [Present]                  │
-│                                    │                │                        │
-│                                    ▼                ▼                        │
-│                              [Return 401:    ] [Extract token    ]           │
-│                              [Missing API key] [from "Bearer {t}"]          │
-│                              (X) END              │                          │
-│                                                   ▼                          │
-│                                          (X) Key ≥ 16 chars?                │
-│                                           │              │                   │
-│                                      [Too short]    [Valid format]           │
-│                                           │              │                   │
-│                                           ▼              ▼                   │
-│                                    [Return 401:   ] [SHA-256 hash  ]        │
-│                                    [Invalid format] [the raw key   ]        │
-│                                    (X) END              │                    │
-│                                                         ▼                    │
-│                                                [DB lookup by     ]           │
-│                                                [keyHash           ]          │
-│                                                [SELECT: id, orgId,]          │
-│                                                [permissions,      ]          │
-│                                                [active, expiresAt ]          │
-│                                                         │                    │
-│                                                         ▼                    │
-│                                                (X) Key found?                │
-│                                                 │            │               │
-│                                            [Not found]  [Found]              │
-│                                                 │            │               │
-│                                                 ▼            ▼               │
-│                                          [Return 401:] (X) Active?           │
-│                                          [Invalid key] │          │          │
-│                                          (X) END  [Revoked]  [Active]       │
-│                                                       │          │          │
-│                                                       ▼          ▼          │
-│                                                [Return 401:] (X) Expired?   │
-│                                                [Key revoked] │          │   │
-│                                                (X) END  [Expired]  [Valid]  │
-│                                                             │          │    │
-│                                                             ▼          ▼    │
-│                                                      [Return 401:]         │
-│                                                      [Key expired]         │
-│                                                      (X) END              │
-│                                                                            │
-│                                                [Attach to request: ]       │
-│                                                [req.organizationId ]       │
-│                                                [req.apiKeyId       ]       │
-│                                                [req.permissions    ]       │
-│                                                         │                   │
-│                                                         ▼                   │
-│                                                [Async: update    ]          │
-│                                                [lastUsedAt = now ]          │
-│                                                [(fire-and-forget)]          │
-│                                                         │                   │
-│                                                         ▼                   │
-│                                                [next() — proceed ]──→(O)   │
-│                                                [to route handler ]   END    │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    START(["Request"]) --> EXTRACT["Extract Authorization header"]
+    EXTRACT --> HDR{"Header present?"}
+    HDR -->|"Missing"| ERR1["401: Missing API key"]
+    HDR -->|"Present"| TOKEN["Extract token from Bearer"]
+    TOKEN --> LEN{"Key >= 16 chars?"}
+    LEN -->|"Too short"| ERR2["401: Invalid format"]
+    LEN -->|"Valid"| HASH["SHA-256 hash the raw key"]
+    HASH --> LOOKUP["DB lookup by keyHash"]
+    LOOKUP --> FOUND{"Key found?"}
+    FOUND -->|"Not found"| ERR3["401: Invalid key"]
+    FOUND -->|"Found"| ACTIVE{"Active?"}
+    ACTIVE -->|"Revoked"| ERR4["401: Key revoked"]
+    ACTIVE -->|"Active"| EXPIRED{"Expired?"}
+    EXPIRED -->|"Expired"| ERR5["401: Key expired"]
+    EXPIRED -->|"Valid"| ATTACH["Attach to request:\norganizationId, apiKeyId, permissions"]
+    ATTACH --> ASYNC["Async: update lastUsedAt"]
+    ASYNC --> NEXT["next() — proceed to route handler"]
 ```
 
 ## BPMN Diagram — RBAC Authorization
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: RBAC Authorization (requirePermission middleware)                       │
-│                                                                              │
-│  (O)──→[Read req.permissions]──→(X) Has 'admin'?                            │
-│        [from auth context   ]    │              │                            │
-│                              [No admin]     [Has admin]                      │
-│                                  │              │                            │
-│                                  ▼              ▼                            │
-│                         (X) Has required?  [next() — proceed]──→(O) END     │
-│                          │            │                                      │
-│                     [Missing]    [Has it]                                    │
-│                          │            │                                      │
-│                          ▼            ▼                                      │
-│                   [Return 403: ] [next() — proceed]──→(O) END               │
-│                   [Forbidden,  ]                                             │
-│                   [requires:   ]                                             │
-│                   [{permission}]                                             │
-│                   (X) END                                                    │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    START(["Request"]) --> READ["Read req.permissions from auth context"]
+    READ --> ADMIN{"Has 'admin'?"}
+    ADMIN -->|"Yes"| PASS1["next() — proceed"]
+    ADMIN -->|"No"| REQ{"Has required permission?"}
+    REQ -->|"Yes"| PASS2["next() — proceed"]
+    REQ -->|"No"| DENY["403: Forbidden\nrequires: permission"]
 ```
 
 ## RBAC Permission Matrix
@@ -117,18 +60,15 @@ description: "BPMN — API key authentication and RBAC permission enforcement"
 
 ## API Key Lifecycle
 
-```
-[Generate key]──→[Hash with SHA-256]──→[Store hash in DB]──→[Return raw key ONCE]
-                                                                    │
-                                    ┌───────────────────────────────┘
-                                    │
-                              [Key used in API calls]
-                                    │
-                         ┌──────────┼──────────┐
-                         ▼          ▼          ▼
-                   [Active use] [Revoked]  [Expired]
-                   [lastUsedAt] [active=   [expiresAt
-                   [updated   ] [false]    [< now]
+```mermaid
+flowchart LR
+    GEN["Generate key"] --> HASH["Hash with SHA-256"]
+    HASH --> STORE["Store hash in DB"]
+    STORE --> RETURN["Return raw key ONCE"]
+    RETURN --> USE["Key used in API calls"]
+    USE --> ACTIVE["Active use\nlastUsedAt updated"]
+    USE --> REVOKED["Revoked\nactive = false"]
+    USE --> EXPIRED["Expired\nexpiresAt < now"]
 ```
 
 **Security properties:**

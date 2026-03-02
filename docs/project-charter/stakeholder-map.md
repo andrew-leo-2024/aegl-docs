@@ -87,43 +87,36 @@ description: Who uses E-AEGL and how they interact with it
 
 ## Interaction Map
 
-```
-                         ┌─────────────┐
-                         │  Regulator  │
-                         │  (External) │
-                         └──────┬──────┘
-                                │ Audit request
-                                ▼
-┌───────────┐  Policy    ┌─────────────┐  Review    ┌──────────────┐
-│   Risk    │──────────→│  Compliance │←──────────│   Executive  │
-│  Manager  │  creation  │   Officer   │  reports   │    / CRO     │
-└─────┬─────┘            └──────┬──────┘            └──────────────┘
-      │                         │
-      │ Escalation review       │ Dashboard + Export
-      ▼                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      E-AEGL Platform                         │
-│                                                              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │ Policy   │  │ Decision │  │  Audit   │  │Escalation│   │
-│  │ Engine   │  │ Pipeline │  │  Trail   │  │  Queue   │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
-│                                                              │
-└─────────────────┬───────────────────────────┬────────────────┘
-                  │                           │
-                  │ SDK / API                 │ Deploy / Monitor
-                  ▼                           ▼
-          ┌───────────┐              ┌──────────────┐
-          │  AI / ML  │              │   Platform   │
-          │ Engineer  │              │  Engineer    │
-          └─────┬─────┘              └──────┬───────┘
-                │ Integration                │ Infrastructure
-                ▼                            ▼
-          ┌───────────┐              ┌──────────────┐
-          │  Security │              │   Security   │
-          │ Engineer  │              │  Engineer    │
-          └───────────┘              └──────────────┘
-               Access control           Audit verification
+```mermaid
+flowchart TD
+    Reg["Regulator (External)"]
+    RM["Risk Manager"]
+    CO["Compliance Officer"]
+    Exec["Executive / CRO"]
+
+    Reg -->|Audit request| CO
+    RM -->|Policy creation| CO
+    Exec -->|Review reports| CO
+
+    subgraph Platform["E-AEGL Platform"]
+        PE["Policy Engine"]
+        DP["Decision Pipeline"]
+        AT["Audit Trail"]
+        EQ["Escalation Queue"]
+    end
+
+    RM -->|Escalation review| Platform
+    CO -->|Dashboard + Export| Platform
+
+    AIML["AI / ML Engineer"]
+    PlatEng["Platform Engineer"]
+    SecEng1["Security Engineer\n(Access control)"]
+    SecEng2["Security Engineer\n(Audit verification)"]
+
+    Platform -->|SDK / API| AIML
+    Platform -->|Deploy / Monitor| PlatEng
+    AIML -->|Integration| SecEng1
+    PlatEng -->|Infrastructure| SecEng2
 ```
 
 ## Workflow by Persona

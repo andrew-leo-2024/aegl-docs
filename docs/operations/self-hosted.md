@@ -35,24 +35,16 @@ Contact sales for a license key.
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────┐
-│              Your Network                 │
-│                                           │
-│  ┌───────────┐     ┌──────────────────┐  │
-│  │ Dashboard │────→│    API Server    │  │
-│  │ :3000     │     │    :4000         │  │
-│  └───────────┘     └────────┬─────────┘  │
-│                             │             │
-│              ┌──────────────┼──────────┐  │
-│              │              │          │  │
-│         ┌────┴────┐   ┌────┴────┐     │  │
-│         │ Postgres │   │  Redis  │     │  │
-│         │  :5432   │   │  :6379  │     │  │
-│         └──────────┘   └─────────┘     │  │
-│                                        │  │
-│  No external network connections       │  │
-└──────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Network["Your Network"]
+        Dashboard["Dashboard :3000"] --> API["API Server :4000"]
+        API --> Postgres["PostgreSQL :5432"]
+        API --> Redis["Redis :6379"]
+        Note["No external network connections"]
+    end
+
+    style Note fill:none,stroke:none
 ```
 
 ## Data Residency

@@ -1,0 +1,1874 @@
+openapi: 3.1.0
+info:
+  title: E-AEGL API
+  version: 1.0.0
+  description: |
+    AI Decision Control Infrastructure — Policy enforcement, audit trails,
+    and governance for enterprise AI.
+
+    The E-AEGL API is a RESTful JSON API for governing AI decisions at the
+    decision boundary. All endpoints are versioned under `/v1/`.
+  contact:
+    name: E-AEGL Support
+    url: https://aegl.io
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.aegl.io/v1
+    description: Cloud (Production)
+  - url: http://localhost:4000/v1
+    description: Self-Hosted (local)
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Decisions
+    description: Submit and query AI decision governance requests
+  - name: Policies
+    description: Create, manage, and simulate governance policies
+  - name: Agents
+    description: Register and manage AI agents
+  - name: Models
+    description: Register and manage AI models
+  - name: Escalations
+    description: Human-in-the-loop review queue
+  - name: Audit
+    description: Tamper-evident audit log with hash-chain verification
+  - name: Webhooks
+    description: Event subscriptions for real-time notifications
+  - name: Organization
+    description: Organization settings, metrics, and usage
+  - name: Billing
+    description: Stripe billing integration
+  - name: Compliance
+    description: SOC 2 evidence and compliance reporting
+  - name: Health
+    description: Health checks and readiness probes
+
+paths:
+  # ── Decisions ──────────────────────────────────────────────
+  /decisions:
+    post:
+      operationId: submitDecision
+      tags: [Decisions]
+      summary: Submit a decision request
+      description: |
+        Core governance endpoint. Submits an action proposal for policy
+        evaluation. Returns PERMITTED, DENIED, or ESCALATED in < 10ms.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Decision evaluated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      operationId: listDecisions
+      tags: [Decisions]
+      summary: List decisions
+      parameters:
+        - $ref: '#/components/parameters/OutcomeFilter'
+        - name: action_type
+          in: query
+          schema:
+            type: string
+        - name: agent_id
+          in: query
+          schema:
+            type: string
+        - name: model_id
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of decisions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /decisions/{id}:
+    get:
+      operationId: getDecision
+      tags: [Decisions]
+      summary: Get decision detail
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Decision detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /decisions/{id}/replay:
+    post:
+      operationId: replayDecision
+      tags: [Decisions]
+      summary: Replay decision against current policies
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Replayed decision result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Policies ───────────────────────────────────────────────
+  /policies:
+    post:
+      operationId: createPolicy
+      tags: [Policies]
+      summary: Create policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyCreate'
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      operationId: listPolicies
+      tags: [Policies]
+      summary: List policies
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/PolicyType'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of policies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /policies/{id}:
+    get:
+      operationId: getPolicy
+      tags: [Policies]
+      summary: Get policy detail
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Policy detail with version history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updatePolicy
+      tags: [Policies]
+      summary: Update policy (creates new version)
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyUpdate'
+      responses:
+        '200':
+          description: Updated policy with new version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      operationId: deletePolicy
+      tags: [Policies]
+      summary: Deactivate policy
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Policy deactivated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /policies/{id}/simulate:
+    post:
+      operationId: simulatePolicy
+      tags: [Policies]
+      summary: Simulate policy against context or historical decisions
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/PolicySimulateSingle'
+                - $ref: '#/components/schemas/PolicySimulateBatch'
+      responses:
+        '200':
+          description: Simulation result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PolicySimulateSingleResult'
+                  - $ref: '#/components/schemas/PolicySimulateBatchResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Agents ─────────────────────────────────────────────────
+  /agents:
+    post:
+      operationId: registerAgent
+      tags: [Agents]
+      summary: Register agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentCreate'
+      responses:
+        '201':
+          description: Agent registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      operationId: listAgents
+      tags: [Agents]
+      summary: List agents
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [Agents]
+      summary: Get agent detail with 24h stats
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Agent detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updateAgent
+      tags: [Agents]
+      summary: Update agent
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdate'
+      responses:
+        '200':
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Agent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /agents/{id}/decisions:
+    get:
+      operationId: getAgentDecisions
+      tags: [Agents]
+      summary: Get agent decision history
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - $ref: '#/components/parameters/OutcomeFilter'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated decisions for this agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Models ─────────────────────────────────────────────────
+  /models:
+    post:
+      operationId: registerModel
+      tags: [Models]
+      summary: Register model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelCreate'
+      responses:
+        '201':
+          description: Model registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      operationId: listModels
+      tags: [Models]
+      summary: List models
+      parameters:
+        - name: approved
+          in: query
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of models
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /models/{id}:
+    get:
+      operationId: getModel
+      tags: [Models]
+      summary: Get model detail
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Model detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: updateModel
+      tags: [Models]
+      summary: Update model
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelUpdate'
+      responses:
+        '200':
+          description: Updated model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Escalations ────────────────────────────────────────────
+  /escalations:
+    get:
+      operationId: listEscalations
+      tags: [Escalations]
+      summary: List escalations
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/EscalationStatus'
+        - name: priority
+          in: query
+          schema:
+            $ref: '#/components/schemas/Priority'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of escalations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /escalations/{id}:
+    get:
+      operationId: getEscalation
+      tags: [Escalations]
+      summary: Get escalation detail
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Escalation detail with original decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /escalations/{id}/decide:
+    post:
+      operationId: resolveEscalation
+      tags: [Escalations]
+      summary: Resolve escalation
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalationResolve'
+      responses:
+        '200':
+          description: Escalation resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationResolved'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Audit ──────────────────────────────────────────────────
+  /audit:
+    get:
+      operationId: queryAudit
+      tags: [Audit]
+      summary: Query audit logs
+      parameters:
+        - $ref: '#/components/parameters/OutcomeFilter'
+        - name: action_type
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /audit/integrity:
+    get:
+      operationId: verifyAuditIntegrity
+      tags: [Audit]
+      summary: Verify hash chain integrity
+      responses:
+        '200':
+          description: Integrity verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditIntegrity'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /audit/{traceId}:
+    get:
+      operationId: getAuditTrace
+      tags: [Audit]
+      summary: Get full decision trace
+      parameters:
+        - name: traceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Full decision trace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditTrace'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Webhooks ───────────────────────────────────────────────
+  /webhooks:
+    post:
+      operationId: createWebhook
+      tags: [Webhooks]
+      summary: Create webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreate'
+      responses:
+        '201':
+          description: Webhook created (secret returned once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookCreated'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    get:
+      operationId: listWebhooks
+      tags: [Webhooks]
+      summary: List webhooks
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated list of webhooks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /webhooks/{id}:
+    get:
+      operationId: getWebhook
+      tags: [Webhooks]
+      summary: Get webhook detail
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Webhook detail (no secret)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: deleteWebhook
+      tags: [Webhooks]
+      summary: Delete webhook
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '204':
+          description: Webhook deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Organization ───────────────────────────────────────────
+  /org:
+    get:
+      operationId: getOrganization
+      tags: [Organization]
+      summary: Get organization
+      responses:
+        '200':
+          description: Organization settings and resource counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      operationId: updateOrganization
+      tags: [Organization]
+      summary: Update organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationUpdate'
+      responses:
+        '200':
+          description: Updated organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /org/metrics:
+    get:
+      operationId: getDashboardMetrics
+      tags: [Organization]
+      summary: Dashboard metrics (24h)
+      responses:
+        '200':
+          description: Aggregated metrics for the last 24 hours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardMetrics'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /org/usage:
+    get:
+      operationId: getBillingUsage
+      tags: [Organization]
+      summary: Billing usage for current period
+      responses:
+        '200':
+          description: Usage statistics and billing estimate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingUsage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Billing ────────────────────────────────────────────────
+  /billing/stripe-webhook:
+    post:
+      operationId: stripeWebhook
+      tags: [Billing]
+      summary: Stripe webhook handler
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Raw Stripe event payload
+      responses:
+        '200':
+          description: Event processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+
+  # ── Compliance ─────────────────────────────────────────────
+  /compliance/soc2-evidence:
+    get:
+      operationId: getSoc2Evidence
+      tags: [Compliance]
+      summary: SOC 2 evidence report
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            type: string
+            example: '2026-Q1'
+          description: 'Format: YYYY-QN (quarter) or YYYY-MM (month)'
+      responses:
+        '200':
+          description: SOC 2 evidence report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Soc2Evidence'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Health ─────────────────────────────────────────────────
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+
+  /health/ready:
+    get:
+      operationId: readinessProbe
+      tags: [Health]
+      summary: Readiness probe
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+        '503':
+          description: Service not ready
+
+  /health/live:
+    get:
+      operationId: livenessProbe
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: 'API key in format: aegl_key_...'
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 100
+    From:
+      name: from
+      in: query
+      schema:
+        type: string
+        format: date-time
+      description: Start date (ISO 8601)
+    To:
+      name: to
+      in: query
+      schema:
+        type: string
+        format: date-time
+      description: End date (ISO 8601)
+    OutcomeFilter:
+      name: outcome
+      in: query
+      schema:
+        $ref: '#/components/schemas/Outcome'
+
+  responses:
+    Unauthorized:
+      description: Invalid or expired API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+  schemas:
+    # ── Enums ──────────────────────────────────────────────
+    Outcome:
+      type: string
+      enum: [PERMITTED, DENIED, ESCALATED, TIMEOUT_DENIED]
+
+    PolicyType:
+      type: string
+      enum: [STATIC, DYNAMIC, THRESHOLD]
+
+    RiskLevel:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+
+    EscalationStatus:
+      type: string
+      enum: [PENDING, APPROVED, DENIED, EXPIRED]
+
+    Priority:
+      type: string
+      enum: [CRITICAL, HIGH, MEDIUM, LOW]
+
+    WebhookEvent:
+      type: string
+      enum:
+        - decision.permitted
+        - decision.denied
+        - decision.escalated
+        - decision.timeout
+        - escalation.created
+        - escalation.resolved
+
+    # ── Error ──────────────────────────────────────────────
+    Error:
+      type: object
+      required: [error, trace_id]
+      properties:
+        error:
+          type: string
+        trace_id:
+          type: string
+
+    ValidationError:
+      type: object
+      required: [error, trace_id]
+      properties:
+        error:
+          type: string
+          example: Validation failed
+        trace_id:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    # ── Pagination ─────────────────────────────────────────
+    PaginationMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ── Decisions ──────────────────────────────────────────
+    DecisionRequest:
+      type: object
+      required: [action_type, action_payload, agent_id]
+      properties:
+        action_type:
+          type: string
+          example: approve_loan
+        action_payload:
+          type: object
+          example: { amount: 250000, recommendation: approve }
+        context:
+          type: object
+        agent_id:
+          type: string
+          example: agent_loan_processor
+        user_id:
+          type: string
+        model_id:
+          type: string
+
+    DecisionResponse:
+      type: object
+      properties:
+        decision_id:
+          type: string
+          example: dec_abc123
+        trace_id:
+          type: string
+        outcome:
+          $ref: '#/components/schemas/Outcome'
+        outcome_reason:
+          type: string
+        latency_ms:
+          type: number
+        evaluations:
+          type: array
+          items:
+            type: object
+            properties:
+              policy:
+                type: string
+              result:
+                type: string
+                enum: [PASS, FAIL, ESCALATE]
+              details:
+                type: string
+        escalation_id:
+          type: string
+        sla_deadline:
+          type: string
+          format: date-time
+
+    DecisionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        trace_id:
+          type: string
+        action_type:
+          type: string
+        outcome:
+          $ref: '#/components/schemas/Outcome'
+        latency_ms:
+          type: number
+        agent_id:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+
+    DecisionList:
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/DecisionSummary'
+
+    # ── Policies ───────────────────────────────────────────
+    PolicyRule:
+      type: object
+      required: [field, operator, value]
+      properties:
+        field:
+          type: string
+          example: action_payload.amount
+        operator:
+          type: string
+          enum: [gt, gte, lt, lte, eq, neq, in, contains]
+        value: {}
+        action:
+          type: string
+          enum: [DENY, ESCALATE]
+          default: DENY
+        reason:
+          type: string
+
+    PolicyScope:
+      type: object
+      properties:
+        action_types:
+          type: array
+          items:
+            type: string
+        agent_ids:
+          type: array
+          items:
+            type: string
+
+    PolicyCreate:
+      type: object
+      required: [name, type, priority, rules]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/PolicyType'
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        rules:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        scope:
+          $ref: '#/components/schemas/PolicyScope'
+
+    PolicyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        priority:
+          type: integer
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        scope:
+          $ref: '#/components/schemas/PolicyScope'
+
+    Policy:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/PolicyType'
+        priority:
+          type: integer
+        version:
+          type: integer
+        active:
+          type: boolean
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+        created_at:
+          type: string
+          format: date-time
+
+    PolicyDetail:
+      allOf:
+        - $ref: '#/components/schemas/Policy'
+        - type: object
+          properties:
+            versions:
+              type: array
+              items:
+                type: object
+                properties:
+                  version:
+                    type: integer
+                  created_at:
+                    type: string
+                    format: date-time
+
+    PolicyList:
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Policy'
+
+    PolicySimulateSingle:
+      type: object
+      required: [action_type, context]
+      properties:
+        action_type:
+          type: string
+        context:
+          type: object
+          properties:
+            action_payload:
+              type: object
+
+    PolicySimulateBatch:
+      type: object
+      required: [date_range]
+      properties:
+        date_range:
+          type: object
+          required: [from, to]
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+        sample_size:
+          type: integer
+
+    PolicySimulateSingleResult:
+      type: object
+      properties:
+        outcome:
+          $ref: '#/components/schemas/Outcome'
+        triggered_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyRule'
+
+    PolicySimulateBatchResult:
+      type: object
+      properties:
+        total_evaluated:
+          type: integer
+        would_have_permitted:
+          type: integer
+        would_have_denied:
+          type: integer
+        would_have_escalated:
+          type: integer
+        top_trigger_rules:
+          type: array
+          items:
+            type: object
+            properties:
+              rule_index:
+                type: integer
+              trigger_count:
+                type: integer
+        impacted_agents:
+          type: array
+          items:
+            type: object
+            properties:
+              agent_id:
+                type: string
+              count:
+                type: integer
+
+    # ── Agents ─────────────────────────────────────────────
+    AgentCreate:
+      type: object
+      required: [name, risk_level]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        risk_level:
+          $ref: '#/components/schemas/RiskLevel'
+        allowed_actions:
+          type: array
+          items:
+            type: string
+        max_budget:
+          type: number
+        budget_window_hours:
+          type: integer
+
+    AgentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        risk_level:
+          $ref: '#/components/schemas/RiskLevel'
+        allowed_actions:
+          type: array
+          items:
+            type: string
+        max_budget:
+          type: number
+        budget_window_hours:
+          type: integer
+        active:
+          type: boolean
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        risk_level:
+          $ref: '#/components/schemas/RiskLevel'
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    AgentDetail:
+      allOf:
+        - $ref: '#/components/schemas/Agent'
+        - type: object
+          properties:
+            description:
+              type: string
+            allowed_actions:
+              type: array
+              items:
+                type: string
+            max_budget:
+              type: number
+            budget_window_hours:
+              type: integer
+            decision_stats_24h:
+              type: object
+              properties:
+                total:
+                  type: integer
+                permitted:
+                  type: integer
+                denied:
+                  type: integer
+                escalated:
+                  type: integer
+
+    AgentList:
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Agent'
+
+    # ── Models ─────────────────────────────────────────────
+    ModelCreate:
+      type: object
+      required: [name, provider, model_id]
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+        model_id:
+          type: string
+        version:
+          type: string
+        risk_rating:
+          $ref: '#/components/schemas/RiskLevel'
+        approved:
+          type: boolean
+          default: false
+
+    ModelUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        risk_rating:
+          $ref: '#/components/schemas/RiskLevel'
+        approved:
+          type: boolean
+
+    Model:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        provider:
+          type: string
+        model_id:
+          type: string
+        version:
+          type: string
+        risk_rating:
+          $ref: '#/components/schemas/RiskLevel'
+        approved:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    ModelDetail:
+      allOf:
+        - $ref: '#/components/schemas/Model'
+        - type: object
+          properties:
+            decision_count:
+              type: integer
+
+    ModelList:
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Model'
+
+    # ── Escalations ────────────────────────────────────────
+    Escalation:
+      type: object
+      properties:
+        id:
+          type: string
+        decision_id:
+          type: string
+        reason:
+          type: string
+        status:
+          $ref: '#/components/schemas/EscalationStatus'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        sla_deadline:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    EscalationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Escalation'
+        - type: object
+          properties:
+            original_decision:
+              type: object
+              properties:
+                id:
+                  type: string
+                action_type:
+                  type: string
+                action_payload:
+                  type: object
+                outcome:
+                  type: string
+
+    EscalationResolve:
+      type: object
+      required: [decision, rationale]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, DENIED]
+        rationale:
+          type: string
+
+    EscalationResolved:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [APPROVED, DENIED]
+        resolved_by:
+          type: string
+        resolved_at:
+          type: string
+          format: date-time
+        original_decision:
+          type: object
+          properties:
+            id:
+              type: string
+            outcome:
+              $ref: '#/components/schemas/Outcome'
+
+    EscalationList:
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Escalation'
+
+    # ── Audit ──────────────────────────────────────────────
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        trace_id:
+          type: string
+        action_type:
+          type: string
+        outcome:
+          $ref: '#/components/schemas/Outcome'
+        latency_ms:
+          type: number
+        sequence_number:
+          type: integer
+        hash:
+          type: string
+          description: SHA-256 hash of this entry
+        created_at:
+          type: string
+          format: date-time
+
+    AuditList:
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AuditEntry'
+
+    AuditIntegrity:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        total_blocks:
+          type: integer
+        broken_at:
+          type: integer
+          description: Sequence number where chain breaks (only if valid=false)
+        checked_at:
+          type: string
+          format: date-time
+
+    AuditTrace:
+      type: object
+      properties:
+        trace_id:
+          type: string
+        decision:
+          type: object
+          properties:
+            id:
+              type: string
+            action_type:
+              type: string
+            action_payload:
+              type: object
+            outcome:
+              $ref: '#/components/schemas/Outcome'
+            latency_ms:
+              type: number
+            received_at:
+              type: string
+              format: date-time
+        policy_evaluations:
+          type: array
+          items:
+            type: object
+            properties:
+              policy:
+                type: string
+              result:
+                type: string
+                enum: [PASS, FAIL, ESCALATE]
+              details:
+                type: string
+        escalation:
+          type: object
+          properties:
+            id:
+              type: string
+            status:
+              $ref: '#/components/schemas/EscalationStatus'
+            priority:
+              $ref: '#/components/schemas/Priority'
+            sla_deadline:
+              type: string
+              format: date-time
+        audit_log:
+          type: object
+          properties:
+            sequence_number:
+              type: integer
+            hash:
+              type: string
+            previous_hash:
+              type: string
+
+    # ── Webhooks ───────────────────────────────────────────
+    WebhookCreate:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+        description:
+          type: string
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    WebhookCreated:
+      allOf:
+        - $ref: '#/components/schemas/Webhook'
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: HMAC signing secret (returned only at creation)
+
+    WebhookList:
+      allOf:
+        - $ref: '#/components/schemas/PaginationMeta'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Webhook'
+
+    # ── Organization ───────────────────────────────────────
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        plan:
+          type: string
+        settings:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        counts:
+          type: object
+          properties:
+            users:
+              type: integer
+            agents:
+              type: integer
+            policies:
+              type: integer
+            api_keys:
+              type: integer
+
+    OrganizationUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        settings:
+          type: object
+          properties:
+            default_sla_hours:
+              type: integer
+            fail_open:
+              type: boolean
+
+    DashboardMetrics:
+      type: object
+      properties:
+        period:
+          type: string
+          example: 24h
+        since:
+          type: string
+          format: date-time
+        decisions:
+          type: object
+          properties:
+            total:
+              type: integer
+            by_outcome:
+              type: object
+              properties:
+                PERMITTED:
+                  type: integer
+                DENIED:
+                  type: integer
+                ESCALATED:
+                  type: integer
+        latency:
+          type: object
+          properties:
+            avg_ms:
+              type: number
+            max_ms:
+              type: number
+        escalations_pending:
+          type: integer
+        active_agents:
+          type: integer
+        active_policies:
+          type: integer
+
+    BillingUsage:
+      type: object
+      properties:
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        decisions_total:
+          type: integer
+        decisions_permitted:
+          type: integer
+        decisions_denied:
+          type: integer
+        decisions_escalated:
+          type: integer
+        decisions_timeout:
+          type: integer
+        escalations_created:
+          type: integer
+        escalations_resolved:
+          type: integer
+        avg_latency_ms:
+          type: number
+        billing_estimate:
+          type: object
+          properties:
+            plan:
+              type: string
+            plan_limit:
+              type: integer
+            current_usage:
+              type: integer
+            overage:
+              type: integer
+            estimated_cost_cents:
+              type: integer
+
+    # ── Compliance ─────────────────────────────────────────
+    Soc2Evidence:
+      type: object
+      properties:
+        report_type:
+          type: string
+          example: SOC2_EVIDENCE
+        organization_id:
+          type: string
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        generated_at:
+          type: string
+          format: date-time
+        trust_service_criteria:
+          type: object
+          properties:
+            access_control:
+              type: object
+              properties:
+                total_api_keys:
+                  type: integer
+                active_api_keys:
+                  type: integer
+                expired_api_keys:
+                  type: integer
+                total_auth_events:
+                  type: integer
+                unique_agents:
+                  type: integer
+            change_management:
+              type: object
+              properties:
+                policy_versions_created:
+                  type: integer
+                policies_active:
+                  type: integer
+                policies_deactivated:
+                  type: integer
+                configuration_changes:
+                  type: integer
+            monitoring:
+              type: object
+              properties:
+                total_decisions:
+                  type: integer
+                decisions_by_outcome:
+                  type: object
+                  properties:
+                    PERMITTED:
+                      type: integer
+                    DENIED:
+                      type: integer
+                    ESCALATED:
+                      type: integer
+                avg_latency_ms:
+                  type: number
+                sla_compliance_rate:
+                  type: number
+                escalations_created:
+                  type: integer
+                escalations_resolved:
+                  type: integer
+                escalations_expired:
+                  type: integer
+            data_protection:
+              type: object
+              properties:
+                audit_chain_valid:
+                  type: boolean
+                total_audit_blocks:
+                  type: integer
+                chain_verified_at:
+                  type: string
+                  format: date-time
+
+    # ── Health ─────────────────────────────────────────────
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string

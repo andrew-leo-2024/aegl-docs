@@ -57,28 +57,21 @@ This catalog documents every business process, workflow, and automation in the E
 
 All process diagrams use standard BPMN 2.0 notation rendered in ASCII:
 
-```
-(O)     Start Event          — Process begins here
-(X)     Exclusive Gateway    — One path based on condition
-(+)     Parallel Gateway     — All paths execute simultaneously
-[Task]  Activity/Task        — A unit of work
-(O)-->  End Event            — Process terminates
-~~>     Message Flow         — Communication between pools
--->     Sequence Flow        — Normal flow progression
-- - >   Conditional Flow     — Flow with a condition
-```
+| Symbol | Name | Meaning |
+|--------|------|---------|
+| `(O)` | Start/End Event | Process begins or terminates |
+| `(X)` | Exclusive Gateway | One path based on condition |
+| `(+)` | Parallel Gateway | All paths execute simultaneously |
+| `[Task]` | Activity/Task | A unit of work |
+| `-->` | Sequence Flow | Normal flow progression |
 
-### Swim Lane Convention
+All BPMN diagrams in this documentation use interactive Mermaid flowcharts with subgraphs for pools and lanes:
 
-```
-┌─────────────────────────────────────┐
-│ Pool: System/Actor Name              │
-│                                      │
-│ ┌─────────────────────────────────┐ │
-│ │ Lane: Sub-component/Role         │ │
-│ │                                  │ │
-│ │  (O)──→[Task]──→(X)──→[Task]   │ │
-│ │                                  │ │
-│ └─────────────────────────────────┘ │
-└─────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph POOL["Pool: System/Actor Name"]
+        subgraph LANE["Lane: Sub-component/Role"]
+            START(["O"]) --> TASK1["Task"] --> GW{"Gateway"} --> TASK2["Task"]
+        end
+    end
 ```

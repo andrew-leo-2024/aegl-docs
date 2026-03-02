@@ -35,10 +35,13 @@ AI governance is no longer optional. Multiple regulatory frameworks now mandate 
 
 ### Market Size
 
-```
-Total Addressable Market (TAM):     $47B  (All AI governance)
-Serviceable Addressable Market:     $12B  (Runtime decision governance)
-Serviceable Obtainable Market:      $500M (Regulated industries, Yr 3)
+```mermaid
+flowchart LR
+    TAM["TAM: $47B\nAll AI governance"]
+    SAM["SAM: $12B\nRuntime decision governance"]
+    SOM["SOM: $500M\nRegulated industries, Yr 3"]
+
+    TAM --> SAM --> SOM
 ```
 
 ### Unit Economics

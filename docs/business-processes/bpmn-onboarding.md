@@ -14,69 +14,36 @@ description: "BPMN — New customer setup from signup to first governed decision
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Customer                                                               │
-│                                                                              │
-│  (O)──→[Sign contract /    ]──→[Receive org        ]──→[Install SDK     ]  │
-│        [register account   ]   [credentials         ]   [npm install     ]  │
-│                                [+ API key            ]   [@aegl/sdk       ]  │
-│                                                              │              │
-│                                                              ▼              │
-│                                                    [Configure aegl     ]    │
-│                                                    [in application     ]    │
-│                                                    [aegl.decide()      ]    │
-│                                                              │              │
-│                                                              ▼              │
-│                                                    [Define first       ]    │
-│                                                    [policy (YAML       ]    │
-│                                                    [or Dashboard)      ]    │
-│                                                              │              │
-│                                                              ▼              │
-│                                                    [Submit test        ]    │
-│                                                    [decision           ]──→(O)│
-│                                                    [Verify PERMITTED/   ]     │
-│                                                    [DENIED response     ]     │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph CUSTOMER["Pool: Customer"]
+        C1(["O"]) --> C2["Sign contract /\nregister account"]
+        C2 --> C3["Receive org credentials\n+ API key"]
+        C3 --> C4["Install SDK\nnpm install @aegl/sdk"]
+        C4 --> C5["Configure aegl\nin application\naegl.decide()"]
+        C5 --> C6["Define first policy\n(YAML or Dashboard)"]
+        C6 --> C7["Submit test decision\nVerify response"]
+        C7 --> C_END(["O"])
+    end
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: E-AEGL Platform                                                        │
-│                                                                              │
-│ ┌─ Lane: Organization Setup ─────────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  (O)──→[Create Organization ]──→[Generate admin    ]──→[Create API    ]│  │
-│ │        [record              ]   [user account      ]   [key (OWNER   ]│  │
-│ │        [name, slug, plan    ]                          [permissions) ]│  │
-│ │                                                              │         │  │
-│ │                                                              ▼         │  │
-│ │                                                    [Generate tenant ]   │  │
-│ │                                                    [encryption key  ]   │  │
-│ │                                                    [(if encrypted   ]   │  │
-│ │                                                    [plan)           ]   │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Default Configuration ──────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Apply default settings ]──→[Set data residency  ]──→[Configure     ]│  │
-│ │  [timezone, locale,      ]   [region (US default)  ]   [webhook       ]│  │
-│ │  [notification prefs     ]                             [templates     ]│  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Verification ───────────────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [First API call         ]──→[First decision      ]──→[Audit log     ]│  │
-│ │  [authenticates          ]   [processed            ]   [genesis block ]│  │
-│ │  [successfully           ]   [< 10ms               ]   [created       ]│  │
-│ │                                                              │         │  │
-│ │                                                              ▼         │  │
-│ │                                                    [Onboarding       ] │  │
-│ │                                                    [complete         ]──→(O)│
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
+    subgraph PLATFORM["Pool: E-AEGL Platform"]
+        subgraph SETUP["Lane: Organization Setup"]
+            P1(["O"]) --> P2["Create Organization\nname, slug, plan"]
+            P2 --> P3["Generate admin\nuser account"]
+            P3 --> P4["Create API key\n(OWNER permissions)"]
+            P4 --> P5["Generate tenant\nencryption key\n(if encrypted plan)"]
+        end
+        subgraph CONFIG["Lane: Default Configuration"]
+            D1["Apply default settings\ntimezone, locale"] --> D2["Set data residency\nregion (US default)"]
+            D2 --> D3["Configure webhook\ntemplates"]
+        end
+        subgraph VERIFY["Lane: Verification"]
+            V1["First API call\nauthenticates"] --> V2["First decision\nprocessed < 10ms"]
+            V2 --> V3["Audit log\ngenesis block created"]
+            V3 --> V4["Onboarding complete"]
+            V4 --> P_END(["O"])
+        end
+    end
 ```
 
 ## Onboarding Checklist

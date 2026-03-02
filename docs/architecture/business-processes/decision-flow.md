@@ -10,64 +10,19 @@ This document describes the complete business process from action proposal to go
 
 ## Process Overview
 
-```
-┌────────────────────────────────────────────────────────────┐
-│ 1. AI Agent generates recommendation                       │
-│    (e.g., "approve loan for $250K")                        │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 2. Application calls aegl.decide()                         │
-│    Passes: actionType, actionPayload, context              │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 3. E-AEGL API receives DecisionRequest                     │
-│    - Validates request (Zod schema)                        │
-│    - Authenticates API key (SHA-256 lookup)                 │
-│    - Verifies agent is active                              │
-│    - Starts precision timer                                │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 4. Policy Engine evaluates all active policies              │
-│    - Sorted by priority (lower = higher priority)          │
-│    - Each rule evaluated against action payload            │
-│    - Results: PASS, FAIL, or ESCALATE per policy           │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 5. Action Gate determines final outcome                     │
-│    - DENY > ESCALATE > PERMIT hierarchy                    │
-│    - Agent risk level may override to ESCALATE             │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 6. Atomic write (single Prisma transaction)                 │
-│    - Decision record                                       │
-│    - PolicyEvaluation records                              │
-│    - Escalation record (if ESCALATED)                      │
-│    - AuditLog entry (hash-chained)                         │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 7. Response returned to SDK                                │
-│    - outcome, evaluations, latencyMs                       │
-│    - escalationId + slaDeadline (if escalated)             │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 8. Application acts on outcome                              │
-│    - PERMITTED: execute the action                         │
-│    - DENIED: block the action, log reason                  │
-│    - ESCALATED: queue for human review                     │
-└──────────────────┬─────────────────────────────────────────┘
-                   ▼
-┌────────────────────────────────────────────────────────────┐
-│ 9. Webhooks dispatched (non-blocking)                       │
-│    - decision.permitted / denied / escalated               │
-│    - Slack, PagerDuty, email, custom integrations          │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["1. AI Agent generates recommendation\n(e.g., approve loan for $250K)"]
+    B["2. Application calls aegl.decide()\nPasses: actionType, actionPayload, context"]
+    C["3. E-AEGL API receives DecisionRequest\n- Validates request (Zod schema)\n- Authenticates API key (SHA-256 lookup)\n- Verifies agent is active\n- Starts precision timer"]
+    D["4. Policy Engine evaluates all active policies\n- Sorted by priority (lower = higher priority)\n- Each rule evaluated against action payload\n- Results: PASS, FAIL, or ESCALATE per policy"]
+    E["5. Action Gate determines final outcome\n- DENY > ESCALATE > PERMIT hierarchy\n- Agent risk level may override to ESCALATE"]
+    F["6. Atomic write (single Prisma transaction)\n- Decision record\n- PolicyEvaluation records\n- Escalation record (if ESCALATED)\n- AuditLog entry (hash-chained)"]
+    G["7. Response returned to SDK\n- outcome, evaluations, latencyMs\n- escalationId + slaDeadline (if escalated)"]
+    H["8. Application acts on outcome\n- PERMITTED: execute the action\n- DENIED: block the action, log reason\n- ESCALATED: queue for human review"]
+    I["9. Webhooks dispatched (non-blocking)\n- decision.permitted / denied / escalated\n- Slack, PagerDuty, email, custom integrations"]
+
+    A --> B --> C --> D --> E --> F --> G --> H --> I
 ```
 
 ## Error Handling

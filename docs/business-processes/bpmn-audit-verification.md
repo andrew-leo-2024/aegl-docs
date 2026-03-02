@@ -15,60 +15,21 @@ description: "BPMN — Hash chain integrity verification and tamper detection"
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Audit Verification                                                     │
-│                                                                              │
-│  (O)──→[GET /v1/audit/     ]──→[Authenticate +     ]──→[Fetch all audit ]│
-│        [integrity          ]   [check audit:read   ]   [logs for org    ]│
-│                                                         [ORDER BY seq ASC]│
-│                                                              │              │
-│                                                              ▼              │
-│                                                     (X) Any records?        │
-│                                                      │             │        │
-│                                                 [Yes: ≥1]    [No: empty]   │
-│                                                      │             │        │
-│                                                      │             ▼        │
-│                                                      │    [Return valid:   ]│
-│                                                      │    [true, blocks: 0 ]│
-│                                                      │         (O) END      │
-│                                                      ▼                      │
-│                                              [Initialize:          ]        │
-│                                              [previousHash = null  ]        │
-│                                              [blockIndex = 0       ]        │
-│                                                      │                      │
-│                                                      ▼                      │
-│                                              [FOR EACH audit log:  ]        │
-│                                              │                     │        │
-│                                              ▼                     │        │
-│                                    [Recompute hash:        ]       │        │
-│                                    [SHA-256(               ]       │        │
-│                                    [  decisionId +         ]       │        │
-│                                    [  actionType +         ]       │        │
-│                                    [  outcome +            ]       │        │
-│                                    [  sequenceNumber +     ]       │        │
-│                                    [  previousHash         ]       │        │
-│                                    [)                      ]       │        │
-│                                              │                     │        │
-│                                              ▼                     │        │
-│                                    (X) hash == stored hash?        │        │
-│                                     │                │             │        │
-│                                [Yes: match]    [No: MISMATCH]      │        │
-│                                     │                │             │        │
-│                                     │                ▼             │        │
-│                                     │    [Return valid: false     ]│        │
-│                                     │    [broken_at: sequence#    ]│        │
-│                                     │         (O) END             │        │
-│                                     ▼                              │        │
-│                            [previousHash =     ]                   │        │
-│                            [current hash       ]                   │        │
-│                            [blockIndex++       ]───────────────────┘        │
-│                                                                              │
-│                            [All verified:       ]                            │
-│                            [Return valid: true  ]                            │
-│                            [total_blocks: N     ]──→(O) END                 │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    START(["O"]) --> REQ["GET /v1/audit/integrity"]
+    REQ --> AUTH["Authenticate +\ncheck audit:read"]
+    AUTH --> FETCH["Fetch all audit logs for org\nORDER BY seq ASC"]
+    FETCH --> ANY{"Any records?"}
+    ANY -->|"No: empty"| EMPTY["Return valid: true, blocks: 0"]
+    ANY -->|"Yes"| INIT["Initialize:\npreviousHash = null\nblockIndex = 0"]
+    INIT --> LOOP["FOR EACH audit log"]
+    LOOP --> COMPUTE["Recompute hash:\nSHA-256(decisionId +\nactionType + outcome +\nsequenceNumber + previousHash)"]
+    COMPUTE --> MATCH{"hash == stored hash?"}
+    MATCH -->|"No: MISMATCH"| BROKEN["Return valid: false\nbroken_at: sequence#"]
+    MATCH -->|"Yes: match"| ADVANCE["previousHash = current hash\nblockIndex++"]
+    ADVANCE --> LOOP
+    LOOP -->|"All done"| VALID["Return valid: true\ntotal_blocks: N"]
 ```
 
 ## Hash Chain Structure
@@ -89,11 +50,11 @@ AuditLog[n] = {
 
 ### Chain Linking
 
-```
-Block 0 (Genesis):  hash = SHA-256(content + "")
-Block 1:            hash = SHA-256(content + Block0.hash)
-Block 2:            hash = SHA-256(content + Block1.hash)
-Block N:            hash = SHA-256(content + Block[N-1].hash)
+```mermaid
+flowchart LR
+    B0["Block 0 (Genesis)\nhash = SHA-256(content + '')"] --> B1["Block 1\nhash = SHA-256(content + Block0.hash)"]
+    B1 --> B2["Block 2\nhash = SHA-256(content + Block1.hash)"]
+    B2 --> BN["Block N\nhash = SHA-256(content + Block[N-1].hash)"]
 ```
 
 ### Tamper Detection
@@ -103,12 +64,17 @@ If ANY record is modified after creation:
 2. Every subsequent record's hash is also invalid (chain broken)
 3. The `broken_at` sequence number identifies the first tampered record
 
-```
-Block 0: ████ valid ████
-Block 1: ████ valid ████
-Block 2: ████ TAMPERED ████  ← hash mismatch detected
-Block 3: ████ invalid  ████  ← chain broken from here
-Block 4: ████ invalid  ████
+```mermaid
+flowchart LR
+    B0["Block 0 ✓ valid"] --> B1["Block 1 ✓ valid"]
+    B1 --> B2["Block 2 ✗ TAMPERED\nhash mismatch detected"]
+    B2 --> B3["Block 3 ✗ invalid\nchain broken"]
+    B3 --> B4["Block 4 ✗ invalid"]
+    style B0 fill:#059669,color:#fff
+    style B1 fill:#059669,color:#fff
+    style B2 fill:#dc2626,color:#fff
+    style B3 fill:#d97706,color:#fff
+    style B4 fill:#d97706,color:#fff
 ```
 
 ## Verification Response

@@ -10,23 +10,59 @@ E-AEGL uses PostgreSQL with Prisma ORM. The schema contains 16 models organized 
 
 ## Entity Relationship Diagram
 
-```
-Organization (top-level tenant)
-├── User (team members)
-├── Agent (AI agents)
-├── ApprovedModel (AI models)
-├── Policy (governance rules)
-│   └── Rule (individual conditions)
-├── Decision (governed actions)
-│   ├── PolicyEvaluation (per-policy results)
-│   └── Escalation (human review)
-│       └── EscalationDecision (reviewer actions)
-├── AuditLog (hash-chained trail)
-├── ApiKey (authentication)
-├── Webhook (event subscriptions)
-│   └── WebhookDelivery (delivery records)
-├── TenantEncryptionKey (per-tenant encryption)
-└── BillingRecord (usage metering)
+```mermaid
+erDiagram
+    Organization ||--o{ User : "has"
+    Organization ||--o{ Agent : "has"
+    Organization ||--o{ ApprovedModel : "has"
+    Organization ||--o{ Policy : "has"
+    Organization ||--o{ Decision : "has"
+    Organization ||--o{ AuditLog : "has"
+    Organization ||--o{ ApiKey : "has"
+    Organization ||--o{ Webhook : "has"
+    Organization ||--o{ TenantEncryptionKey : "has"
+    Organization ||--o{ BillingRecord : "has"
+    Policy ||--o{ Rule : "contains"
+    Policy ||--o{ PolicyEvaluation : "produces"
+    Decision ||--o{ PolicyEvaluation : "has"
+    Decision ||--o| Escalation : "may trigger"
+    Escalation ||--o{ EscalationDecision : "has"
+    Webhook ||--o{ WebhookDelivery : "dispatches"
+
+    Organization {
+        string id PK
+        string name
+        string slug UK
+        enum plan
+    }
+    Policy {
+        string id PK
+        string name
+        enum type
+        int priority
+        int version
+        boolean active
+    }
+    Decision {
+        string id PK
+        string traceId UK
+        string actionType
+        json actionPayload
+        enum outcome
+        int latencyMs
+    }
+    AuditLog {
+        string id PK
+        string hash
+        string previousHash
+        int sequenceNumber
+    }
+    Escalation {
+        string id PK
+        enum status
+        enum priority
+        datetime slaDeadline
+    }
 ```
 
 ## Core Models

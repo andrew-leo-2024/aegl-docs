@@ -121,19 +121,23 @@ curl http://localhost:4000/v1/audit/integrity
 
 ## High-Availability Architecture
 
-```
-                    Traefik LB
-                   ┌─────┴─────┐
-                   │           │
-              API-1:4000   API-2:4000
-                   │           │
-              ┌────┴───────────┴────┐
-              │                     │
-        PG Primary            PG Replica
-        (write)               (read)
-              │                     │
-              └──── WAL Streaming ──┘
+```mermaid
+flowchart TD
+    LB["Traefik LB"]
+    API1["API-1:4000"]
+    API2["API-2:4000"]
+    PGP["PG Primary (write)"]
+    PGR["PG Replica (read)"]
+    WAL["WAL Streaming"]
+    RS["Redis Sentinel (3 nodes)\nMaster election on failure"]
 
-        Redis Sentinel (3 nodes)
-        └── Master election on failure
+    LB --> API1
+    LB --> API2
+    API1 --> PGP
+    API1 --> PGR
+    API2 --> PGP
+    API2 --> PGR
+    PGP <-->|WAL Streaming| PGR
+    API1 --> RS
+    API2 --> RS
 ```

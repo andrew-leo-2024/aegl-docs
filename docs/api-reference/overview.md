@@ -17,6 +17,8 @@ The E-AEGL API is a RESTful JSON API for governing AI decisions.
 
 All endpoints are versioned under `/v1/`.
 
+> **OpenAPI Spec:** Download the full [OpenAPI 3.1 specification](/openapi/aegl-api.yaml) for use with Swagger UI, Postman, or code generators.
+
 ## Authentication
 
 All API requests (except `/health`) require a Bearer token:

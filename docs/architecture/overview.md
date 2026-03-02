@@ -10,48 +10,25 @@ E-AEGL is **AI Decision Control Infrastructure** — an enterprise governance la
 
 ## Architecture Diagram
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    AI Application                        │
-│                                                          │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────────┐   │
-│  │ AI Model │───→│ SDK      │───→│ Execute Action   │   │
-│  │ Output   │    │ decide() │    │ (if permitted)    │   │
-│  └──────────┘    └────┬─────┘    └──────────────────┘   │
-│                       │                                  │
-└───────────────────────┼──────────────────────────────────┘
-                        │ HTTPS / gRPC
-                        ▼
-┌─────────────────────────────────────────────────────────┐
-│                    E-AEGL API                            │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │ Layer 1: Decision Boundary Interceptor    <2ms   │   │
-│  │ Capture action proposal + full context            │   │
-│  └───────────────────────┬──────────────────────────┘   │
-│                          ▼                               │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │ Layer 2: Policy Engine                    <5ms   │   │
-│  │ Evaluate deterministic rules (no ML)              │   │
-│  │ STATIC → DENY  |  THRESHOLD → ESCALATE           │   │
-│  └───────────────────────┬──────────────────────────┘   │
-│                          ▼                               │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │ Layer 3: Action Gate                      <1ms   │   │
-│  │ Combine policy results + agent risk level         │   │
-│  │ Output: PERMITTED | DENIED | ESCALATED            │   │
-│  └───────────────────────┬──────────────────────────┘   │
-│                          ▼                               │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │ Layer 4: Audit Logger                     <2ms   │   │
-│  │ SHA-256 hash-chained, append-only, tamper-evident │   │
-│  └──────────────────────────────────────────────────┘   │
-│                                                          │
-│  ┌────────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │ PostgreSQL │  │  Redis   │  │  BullMQ Workers  │    │
-│  │ (primary)  │  │ (cache)  │  │  (webhooks/SLA)  │    │
-│  └────────────┘  └──────────┘  └──────────────────┘    │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph APP["AI Application"]
+        A["AI Model Output"] --> B["SDK decide()"]
+        B --> C["Execute Action\n(if permitted)"]
+    end
+
+    B -->|"HTTPS / gRPC"| L1
+
+    subgraph API["E-AEGL API"]
+        L1["Layer 1: Decision Boundary Interceptor — &lt;2ms\nCapture action proposal + full context"]
+        L1 --> L2["Layer 2: Policy Engine — &lt;5ms\nEvaluate deterministic rules (no ML)\nSTATIC → DENY | THRESHOLD → ESCALATE"]
+        L2 --> L3["Layer 3: Action Gate — &lt;1ms\nCombine policy results + agent risk level\nOutput: PERMITTED | DENIED | ESCALATED"]
+        L3 --> L4["Layer 4: Audit Logger — &lt;2ms\nSHA-256 hash-chained, append-only, tamper-evident"]
+
+        PG[("PostgreSQL\n(primary)")]
+        RD[("Redis\n(cache)")]
+        BQ["BullMQ Workers\n(webhooks/SLA)"]
+    end
 ```
 
 ## Design Principles

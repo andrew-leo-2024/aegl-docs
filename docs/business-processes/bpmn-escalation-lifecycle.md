@@ -15,115 +15,62 @@ description: "BPMN — Human-in-the-loop escalation from creation to resolution"
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Decision Pipeline                                                      │
-│                                                                              │
-│  (O)──→[Decision outcome   ]──→[Create Escalation  ]──→[Queue webhook    ]──│
-│        [= ESCALATED        ]   [status: PENDING     ]   [event:          ]  │
-│                                [sla: now + 24h      ]   [decision.       ]  │
-│                                [priority: from agent]   [escalated       ]  │
-│                                                                              │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Human Review                                                           │
-│                                                                              │
-│ ┌─ Lane: Reviewer (Dashboard or API) ────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [GET /v1/escalations   ]──→[Review escalation   ]──→[Review original ]│  │
-│ │  [?status=PENDING       ]   [details: action,    ]   [decision context]│  │
-│ │  [Sorted: priority desc ]   [payload, policies,  ]   [policy evals,   ]│  │
-│ │  [       sla_deadline   ]   [SLA countdown       ]   [agent info      ]│  │
-│ │                                                                         │  │
-│ │                                       │                                │  │
-│ │                                       ▼                                │  │
-│ │                              (X) Decision Gateway                      │  │
-│ │                              │                    │                     │  │
-│ │                         [APPROVE]            [DENY]                    │  │
-│ │                              │                    │                     │  │
-│ │                              ▼                    ▼                     │  │
-│ │                    [POST /v1/escalations/{id}/decide]                   │  │
-│ │                    [outcome: APPROVED | DENIED      ]                   │  │
-│ │                    [rationale: "required text"      ]                   │  │
-│ │                    [reviewer_id: reviewer UUID      ]                   │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Resolution Processing                                                  │
-│                                                                              │
-│ ┌─ Lane: Atomic Resolution (Prisma Transaction) ─────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [BEGIN TRANSACTION     ]──→(+)─────────────────────→                  │  │
-│ │                              │         │         │                      │  │
-│ │                              ▼         ▼         ▼                      │  │
-│ │                     [Create     ] [Update    ] [Update     ]            │  │
-│ │                     [Escalation ] [Escalation] [Decision   ]            │  │
-│ │                     [Decision   ] [status =  ] [outcome =  ]            │  │
-│ │                     [record     ] [APPROVED/ ] [PERMITTED/ ]            │  │
-│ │                     [reviewer,  ] [DENIED    ] [DENIED     ]            │  │
-│ │                     [rationale  ] [resolvedAt] [completedAt]            │  │
-│ │                              │         │         │                      │  │
-│ │                              └────┬────┴─────────┘                      │  │
-│ │                                   ▼                                     │  │
-│ │                     [COMMIT TRANSACTION      ]                          │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                       │                                      │
-│                                       ▼                                      │
-│ ┌─ Lane: Post-Resolution (non-blocking) ─────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Queue webhook:         ]──→[Structured log:     ]──→(O) END          │  │
-│ │  [escalation.resolved    ]   [escalationId,       ]                    │  │
-│ │  [decision_id, reviewer, ]   [outcome, reviewer   ]                    │  │
-│ │  [rationale              ]                                              │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph PIPELINE["Pool: Decision Pipeline"]
+        P_START(["O"]) --> P1["Decision outcome = ESCALATED"]
+        P1 --> P2["Create Escalation\nstatus: PENDING\nsla: now + 24h"]
+        P2 --> P3["Queue webhook\nevent: decision.escalated"]
+    end
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: SLA Timeout Worker (BullMQ — every 5 minutes)                          │
-│                                                                              │
-│  (O)──→[Query: status IN    ]──→(X)──→[FOR EACH expired: ]──→            │
-│  Timer [PENDING, IN_REVIEW  ]   │     [BEGIN TRANSACTION  ]              │
-│  5min  [AND sla < now       ]   │     │                    ]              │
-│                                 │     ▼                    │              │
-│                            [None found]  [Update Escalation]              │
-│                                 │     [status = TIMEOUT   ]              │
-│                                 ▼     [Update Decision    ]              │
-│                            (O) END   [outcome =           ]              │
-│                                      [TIMEOUT_DENIED      ]              │
-│                                      [COMMIT              ]              │
-│                                           │                               │
-│                                           ▼                               │
-│                                      [Queue webhook:      ]              │
-│                                      [decision.timeout    ]──→(O) END    │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+    P3 --> R_START
+
+    subgraph REVIEW["Pool: Human Review"]
+        R_START["GET /v1/escalations\n?status=PENDING\nSorted: priority desc, sla_deadline"] --> R2["Review escalation details\naction, payload, policies, SLA countdown"]
+        R2 --> R3["Review original decision context\npolicy evals, agent info"]
+        R3 --> GW{"Decision Gateway"}
+        GW -->|"APPROVE"| RESOLVE["POST /v1/escalations/id/decide\noutcome, rationale, reviewer_id"]
+        GW -->|"DENY"| RESOLVE
+    end
+
+    RESOLVE --> TX_START
+
+    subgraph RESOLUTION["Pool: Resolution Processing"]
+        subgraph TX["Atomic Resolution (Prisma Transaction)"]
+            TX_START["BEGIN TRANSACTION"] --> TX1["Create EscalationDecision\nreviewer, rationale"]
+            TX_START --> TX2["Update Escalation\nstatus = APPROVED/DENIED\nresolvedAt"]
+            TX_START --> TX3["Update Decision\noutcome = PERMITTED/DENIED"]
+            TX1 --> COMMIT["COMMIT TRANSACTION"]
+            TX2 --> COMMIT
+            TX3 --> COMMIT
+        end
+        COMMIT --> POST1["Queue webhook:\nescalation.resolved"]
+        POST1 --> POST2["Structured log:\nescalationId, outcome, reviewer"]
+        POST2 --> R_END(["END"])
+    end
+
+    subgraph SLA["Pool: SLA Timeout Worker (BullMQ — every 5 min)"]
+        SLA_START(["Timer 5min"]) --> SLA1["Query: status IN PENDING, IN_REVIEW\nAND sla < now"]
+        SLA1 --> SLA_GW{"Any found?"}
+        SLA_GW -->|"None"| SLA_END(["END"])
+        SLA_GW -->|"Found"| SLA_TX["BEGIN TRANSACTION\nUpdate Escalation status = TIMEOUT\nUpdate Decision outcome = TIMEOUT_DENIED\nCOMMIT"]
+        SLA_TX --> SLA_WH["Queue webhook:\ndecision.timeout"]
+        SLA_WH --> SLA_END2(["END"])
+    end
 ```
 
 ## State Machine
 
-```
-                    ┌──────────┐
-          create    │          │   reviewer starts
-    ───────────────→│ PENDING  │──────────────────→┐
-                    │          │                    │
-                    └────┬─────┘                    ▼
-                         │                  ┌──────────────┐
-                    SLA expires              │  IN_REVIEW   │
-                         │                  └──────┬───────┘
-                         ▼                         │
-                    ┌──────────┐         ┌─────────┴──────────┐
-                    │ TIMEOUT  │         ▼                    ▼
-                    │(DENIED)  │   ┌──────────┐        ┌──────────┐
-                    └──────────┘   │ APPROVED │        │  DENIED  │
-                                   │(PERMITTED)│        │(DENIED)  │
-                                   └──────────┘        └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: create
+    PENDING --> IN_REVIEW: reviewer starts
+    PENDING --> TIMEOUT: SLA expires
+    IN_REVIEW --> APPROVED: reviewer approves
+    IN_REVIEW --> DENIED: reviewer denies
+    TIMEOUT --> [*]: outcome = DENIED
+    APPROVED --> [*]: outcome = PERMITTED
+    DENIED --> [*]: outcome = DENIED
 ```
 
 ## Process Steps

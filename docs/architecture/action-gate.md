@@ -23,28 +23,17 @@ This means:
 
 ## Gate Logic
 
-```
-┌─────────────────────────────────────────────┐
-│             Policy Results                   │
-│                                              │
-│  Any policy DENIED?                          │
-│  ├── YES → Outcome: DENIED                  │
-│  └── NO ↓                                   │
-│                                              │
-│  Any policy ESCALATED?                       │
-│  ├── YES → Outcome: ESCALATED               │
-│  └── NO ↓                                   │
-│                                              │
-│  Agent risk CRITICAL?                        │
-│  ├── YES → Outcome: ESCALATED (override)    │
-│  └── NO ↓                                   │
-│                                              │
-│  Agent risk HIGH?                            │
-│  ├── YES → Outcome: ESCALATED (override)    │
-│  └── NO ↓                                   │
-│                                              │
-│  Outcome: PERMITTED                          │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    PR["Policy Results"] --> Q1{"Any policy DENIED?"}
+    Q1 -->|"YES"| DENIED["Outcome: DENIED"]
+    Q1 -->|"NO"| Q2{"Any policy ESCALATED?"}
+    Q2 -->|"YES"| ESC["Outcome: ESCALATED"]
+    Q2 -->|"NO"| Q3{"Agent risk CRITICAL?"}
+    Q3 -->|"YES"| ESC2["Outcome: ESCALATED (override)"]
+    Q3 -->|"NO"| Q4{"Agent risk HIGH?"}
+    Q4 -->|"YES"| ESC2
+    Q4 -->|"NO"| PERMIT["Outcome: PERMITTED"]
 ```
 
 ## Risk Level Overrides

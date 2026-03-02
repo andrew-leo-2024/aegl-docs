@@ -15,64 +15,37 @@ description: "BPMN — SOC 2 evidence collection and regulatory report generatio
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Compliance Officer / Auditor                                           │
-│                                                                              │
-│  (O)──→(X) Trigger source                                                   │
-│         │              │              │                                      │
-│    [Dashboard]    [CLI command]  [API call]                                  │
-│         │              │              │                                      │
-│         ▼              ▼              ▼                                      │
-│  [Click "Export  ] [aegl audit   ] [GET /v1/          ]                     │
-│  [Compliance"    ] [export       ] [compliance/       ]                     │
-│  [button         ] [--regulation ] [soc2-evidence     ]                     │
-│                    [occ-sr-11-7  ] [?period=2026-Q1   ]                     │
-│                                                                              │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Evidence Collection Engine                                             │
-│                                                                              │
-│  [Parse period       ]──→[Resolve date range ]──→(+) Parallel collection   │
-│  [string (e.g.,      ]   [from: 2026-01-01   ]    │    │    │    │         │
-│  [2026-Q1)           ]   [to:   2026-03-31   ]    │    │    │    │         │
-│                                                    ▼    ▼    ▼    ▼         │
-│                                                                              │
-│ ┌─ Lane: Access Control Evidence ────────────────────────────────────────┐  │
-│ │  [Count API keys created  ]  [Count keys revoked  ]  [Count expired  ]│  │
-│ │  [Count active keys       ]  [Group users by role  ]                   │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Change Management Evidence ─────────────────────────────────────┐  │
-│ │  [Count policies created  ]  [Count updated       ]  [Count deactivated]│ │
-│ │  [Active policies count   ]  [Recent version      ]  [Total governed  ]│  │
-│ │                               [history (sample 50) ]  [decisions       ]│  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Monitoring Evidence ────────────────────────────────────────────┐  │
-│ │  [Total decisions         ]  [Avg latency         ]  [P95 latency    ]│  │
-│ │  [Max latency             ]  [SLA compliance %    ]  [By outcome     ]│  │
-│ │  [Escalations created     ]  [Escalations resolved]  [Avg resolution ]│  │
-│ │                                                       [time (hours)  ]│  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Data Protection Evidence ───────────────────────────────────────┐  │
-│ │  [Verify hash chain       ]  [Check encryption    ]  [Data retention ]│  │
-│ │  [integrity               ]  [key configured      ]  [policy         ]│  │
-│ │  [Total audit blocks      ]  [First/last block    ]  [Data residency ]│  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│                              (+) Join all evidence                            │
-│                                       │                                      │
-│                                       ▼                                      │
-│  [Generate summary:         ]──→[Build report JSON  ]──→[Return HTTP   ]   │
-│  [critical_issues[]         ]   [with all 4 domains ]   [200 with      ]   │
-│  [recommendations[]         ]   [+ summary          ]   [report        ]   │
-│  [total_findings            ]   [+ metadata         ]   (O) END            │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph TRIGGER["Pool: Compliance Officer / Auditor"]
+        T_START(["O"]) --> T_SRC{"Trigger source"}
+        T_SRC -->|"Dashboard"| T_DASH["Click 'Export Compliance' button"]
+        T_SRC -->|"CLI"| T_CLI["aegl audit export\n--regulation occ-sr-11-7"]
+        T_SRC -->|"API"| T_API["GET /v1/compliance/\nsoc2-evidence?period=2026-Q1"]
+    end
+
+    T_DASH --> PARSE
+    T_CLI --> PARSE
+    T_API --> PARSE
+
+    subgraph ENGINE["Pool: Evidence Collection Engine"]
+        PARSE["Parse period string\n(e.g., 2026-Q1)"] --> RESOLVE["Resolve date range\nfrom: 2026-01-01\nto: 2026-03-31"]
+        RESOLVE --> PARALLEL["Parallel collection"]
+
+        PARALLEL --> AC["Access Control Evidence\nAPI keys, roles, auth events"]
+        PARALLEL --> CM["Change Management Evidence\nPolicies created/updated/deactivated"]
+        PARALLEL --> MON["Monitoring Evidence\nDecisions, latency, SLA compliance"]
+        PARALLEL --> DP["Data Protection Evidence\nHash chain, encryption, data residency"]
+
+        AC --> JOIN["Join all evidence"]
+        CM --> JOIN
+        MON --> JOIN
+        DP --> JOIN
+
+        JOIN --> SUMMARY["Generate summary:\ncritical_issues, recommendations"]
+        SUMMARY --> BUILD["Build report JSON\nall 4 domains + metadata"]
+        BUILD --> RETURN["Return HTTP 200\nwith report"]
+    end
 ```
 
 ## SOC 2 Trust Service Criteria Mapping

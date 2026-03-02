@@ -18,44 +18,17 @@ An escalation is created when:
 
 ## Process Flow
 
-```
-Decision ESCALATED
-    │
-    ▼
-┌─────────────────────────────┐
-│ Escalation Record Created    │
-│ - reason: why escalated     │
-│ - priority: based on policy │
-│ - slaDeadline: calculated   │
-│ - status: PENDING           │
-└──────────┬──────────────────┘
-           │
-           ├──→ Webhook: escalation.created
-           │    (Slack, PagerDuty, email)
-           │
-           ▼
-┌─────────────────────────────┐
-│ Human Reviewer Reviews       │
-│ - Views original decision   │
-│ - Sees escalation reason    │
-│ - Reviews action payload    │
-│ - SLA countdown visible     │
-└──────────┬──────────────────┘
-           │
-     ┌─────┴─────┐
-     ▼           ▼
-  APPROVE     DENY        (or EXPIRE if SLA passes)
-     │           │
-     ▼           ▼
-┌─────────────────────────────┐
-│ Resolution Applied           │
-│ - EscalationDecision created│
-│ - Original decision updated │
-│   ESCALATED → PERMITTED     │
-│   or ESCALATED → DENIED     │
-│ - Audit log entry added     │
-│ - Webhook: escalation.resolved
-└─────────────────────────────┘
+```mermaid
+flowchart TD
+    START["Decision ESCALATED"] --> CREATE["Escalation Record Created\nreason, priority, slaDeadline\nstatus: PENDING"]
+    CREATE --> WH["Webhook: escalation.created\n(Slack, PagerDuty, email)"]
+    CREATE --> REVIEW["Human Reviewer Reviews\nViews original decision\nSees escalation reason\nSLA countdown visible"]
+    REVIEW --> APPROVE["APPROVE"]
+    REVIEW --> DENY["DENY"]
+    REVIEW --> EXPIRE["EXPIRE (SLA passed)"]
+    APPROVE --> RESOLVE["Resolution Applied\nEscalationDecision created\nOriginal decision updated\nAudit log entry added\nWebhook: escalation.resolved"]
+    DENY --> RESOLVE
+    EXPIRE --> RESOLVE
 ```
 
 ## SLA Deadlines

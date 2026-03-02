@@ -10,11 +10,9 @@ Policies are the rules that govern AI decisions. They follow a strict lifecycle 
 
 ## Lifecycle Stages
 
-```
-CREATE → ACTIVE → UPDATE (new version) → DEACTIVATE
-                                            │
-                                            ▼
-                                     PRESERVED (audit trail)
+```mermaid
+flowchart LR
+    CREATE --> ACTIVE --> UPDATE["UPDATE\n(new version)"] --> DEACTIVATE --> PRESERVED["PRESERVED\n(audit trail)"]
 ```
 
 ### 1. Creation
@@ -41,10 +39,10 @@ While active, the policy is evaluated against every matching decision:
 
 This ensures that every historical decision traces to the exact policy version that governed it.
 
-```
-Policy "Loan Limits" v1 → deactivated
-Policy "Loan Limits" v2 → active (current)
-Policy "Loan Limits" v3 → active (after next update)
+```mermaid
+flowchart LR
+    V1["Policy 'Loan Limits' v1\n(deactivated)"] --> V2["Policy 'Loan Limits' v2\n(active — current)"]
+    V2 --> V3["Policy 'Loan Limits' v3\n(active — after next update)"]
 ```
 
 ### 4. Deactivation

@@ -18,31 +18,16 @@ Escalations are triggered by:
 
 ## Escalation Lifecycle
 
-```
-Decision → ESCALATED → [Pending Escalation Created]
-                              ↓
-                    Human Reviewer Reviews
-                              ↓
-                    ┌─── APPROVED ────┐
-                    │                 │
-                    │  Original       │
-                    │  decision →     │
-                    │  PERMITTED      │
-                    └─────────────────┘
-                              OR
-                    ┌─── DENIED ──────┐
-                    │                 │
-                    │  Original       │
-                    │  decision →     │
-                    │  DENIED         │
-                    └─────────────────┘
-                              OR
-                    ┌─── EXPIRED ─────┐
-                    │                 │
-                    │  SLA deadline   │
-                    │  passed, no     │
-                    │  action taken   │
-                    └─────────────────┘
+```mermaid
+flowchart TD
+    DEC["Decision → ESCALATED"] --> PENDING["Pending Escalation Created"]
+    PENDING --> REVIEW["Human Reviewer Reviews"]
+    REVIEW --> APPROVED["APPROVED\nOriginal decision → PERMITTED"]
+    REVIEW --> DENIED["DENIED\nOriginal decision → DENIED"]
+    REVIEW --> EXPIRED["EXPIRED\nSLA deadline passed\nno action taken"]
+    style APPROVED fill:#059669,color:#fff
+    style DENIED fill:#dc2626,color:#fff
+    style EXPIRED fill:#d97706,color:#fff
 ```
 
 ## SLA Deadlines

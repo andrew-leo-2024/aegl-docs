@@ -18,14 +18,10 @@ Each audit log entry contains:
 
 If any record in the chain is modified, its hash changes, which breaks the chain from that point forward. This makes tampering detectable.
 
-```
-Block 1          Block 2          Block 3
-┌──────────┐    ┌──────────┐    ┌──────────┐
-│ Data     │    │ Data     │    │ Data     │
-│ Prev: 0  │───→│ Prev: H1 │───→│ Prev: H2 │
-│ Hash: H1 │    │ Hash: H2 │    │ Hash: H3 │
-│ Seq: 1   │    │ Seq: 2   │    │ Seq: 3   │
-└──────────┘    └──────────┘    └──────────┘
+```mermaid
+flowchart LR
+    B1["**Block 1**\nData\nPrev: 0\nHash: H1\nSeq: 1"] --> B2["**Block 2**\nData\nPrev: H1\nHash: H2\nSeq: 2"]
+    B2 --> B3["**Block 3**\nData\nPrev: H2\nHash: H3\nSeq: 3"]
 ```
 
 ## Querying Audit Logs

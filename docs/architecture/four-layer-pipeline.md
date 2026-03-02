@@ -37,21 +37,18 @@ This layer:
 
 The policy engine evaluates all active policies in priority order:
 
-```
-Fetch active policies (sorted by priority ASC)
-    ↓
-For each policy:
-    ├── Check scope (action_type, agent_id match?)
-    │   └── Skip if out of scope
-    ├── Evaluate each rule:
-    │   ├── Resolve field (dot-notation path)
-    │   ├── Apply operator (gt, lt, eq, in, etc.)
-    │   └── Return PASS / FAIL / ESCALATE
-    └── Aggregate results:
-        ├── STATIC FAIL → immediate DENY (stop)
-        ├── DYNAMIC FAIL → DENY (stop)
-        ├── THRESHOLD trigger → mark ESCALATE (continue)
-        └── All rules PASS → PASS (continue)
+```mermaid
+flowchart TD
+    A["Fetch active policies\n(sorted by priority ASC)"] --> B{"Check scope\naction_type, agent_id match?"}
+    B -->|"Out of scope"| SKIP["Skip policy"]
+    B -->|"In scope"| C["Evaluate each rule"]
+    C --> D["Resolve field (dot-notation path)"]
+    D --> E["Apply operator (gt, lt, eq, in, etc.)"]
+    E --> F{"Rule result"}
+    F -->|"STATIC FAIL"| DENY["DENY (stop)"]
+    F -->|"DYNAMIC FAIL"| DENY
+    F -->|"THRESHOLD trigger"| ESC["Mark ESCALATE (continue)"]
+    F -->|"All rules PASS"| PASS["PASS (continue)"]
 ```
 
 Key properties:
@@ -66,15 +63,17 @@ Key properties:
 
 The action gate combines policy results with agent risk assessment:
 
-```
-Input: Policy Engine Result + Agent Risk Level
-    ↓
-Priority logic:
-    ├── Any policy DENIED → final outcome: DENIED
-    ├── Any policy ESCALATED → final outcome: ESCALATED
-    ├── Agent risk CRITICAL → override to ESCALATED
-    ├── Agent risk HIGH + PERMITTED → override to ESCALATED
-    └── Otherwise → final outcome: PERMITTED
+```mermaid
+flowchart TD
+    IN["Policy Engine Result +\nAgent Risk Level"] --> D1{"Any policy DENIED?"}
+    D1 -->|"YES"| DENIED["DENIED"]
+    D1 -->|"NO"| D2{"Any policy ESCALATED?"}
+    D2 -->|"YES"| ESCALATED["ESCALATED"]
+    D2 -->|"NO"| D3{"Agent risk CRITICAL?"}
+    D3 -->|"YES"| ESCALATED
+    D3 -->|"NO"| D4{"Agent risk HIGH?"}
+    D4 -->|"YES"| ESCALATED
+    D4 -->|"NO"| PERMITTED["PERMITTED"]
 ```
 
 The gate enforces a strict hierarchy: DENIED > ESCALATED > PERMITTED.
@@ -85,15 +84,15 @@ The gate enforces a strict hierarchy: DENIED > ESCALATED > PERMITTED.
 
 Every decision is recorded in the append-only, hash-chained audit log:
 
-```
-1. Get previous block's hash (or genesis hash for first entry)
-2. Serialize decision data (deterministic JSON with sorted keys)
-3. Compute SHA-256(data + previousHash + sequenceNumber)
-4. Write atomically in a Prisma transaction:
-   - Decision record
-   - PolicyEvaluation records (one per policy)
-   - Escalation record (if ESCALATED)
-   - AuditLog entry (with hash chain)
+```mermaid
+flowchart TD
+    S1["1. Get previous block hash\n(or genesis hash)"] --> S2["2. Serialize decision data\n(deterministic JSON, sorted keys)"]
+    S2 --> S3["3. Compute SHA-256\n(data + previousHash + sequenceNumber)"]
+    S3 --> S4["4. Write atomically\n(Prisma transaction)"]
+    S4 --> R1["Decision record"]
+    S4 --> R2["PolicyEvaluation records"]
+    S4 --> R3["Escalation record\n(if ESCALATED)"]
+    S4 --> R4["AuditLog entry\n(hash-chained)"]
 ```
 
 The transaction uses **serializable isolation** to prevent race conditions under concurrent writes.

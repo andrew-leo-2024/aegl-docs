@@ -16,94 +16,34 @@ description: "BPMN — Database backup, verification, offsite storage, and resto
 
 ## BPMN Diagram — Backup
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Backup Automation                                                      │
-│                                                                              │
-│  ⏰──→[Cron fires every   ]──→[Setup:               ]──→[pg_dump:        ]│
-│  6h   [6 hours             ]   [BACKUP_DIR = /var/   ]   [--format=custom ]│
-│       [                    ]   [backups/aegl         ]   [--compress=9    ]│
-│                                [TIMESTAMP = now      ]   [--no-owner      ]│
-│                                [Ensure dir exists    ]   [--no-privileges ]│
-│                                                          [| gzip          ]│
-│                                                              │              │
-│                                                              ▼              │
-│                                                     [Verify integrity:   ]  │
-│                                                     [gzip -t backup.gz  ]  │
-│                                                              │              │
-│                                                              ▼              │
-│                                                     (X) Integrity OK?       │
-│                                                      │              │       │
-│                                                 [Corrupted]    [Valid]      │
-│                                                      │              │       │
-│                                                      ▼              ▼       │
-│                                               [Log ERROR   ] (X) S3 configured?│
-│                                               [Exit code 1 ]  │          │  │
-│                                               (X) FAIL       [No S3]  [S3] │
-│                                                                │       │   │
-│                                                                ▼       ▼   │
-│                                                          [Skip S3 ] [aws ] │
-│                                                          [upload  ] [s3  ] │
-│                                                                     [cp  ] │
-│                                                                     [with] │
-│                                                                     [SSE ] │
-│                                                                     [KMS ] │
-│                                                                       │    │
-│                                                              ┌────────┘    │
-│                                                              ▼             │
-│                                                     [Cleanup: delete    ]  │
-│                                                     [backups older than ]  │
-│                                                     [RETENTION days     ]  │
-│                                                              │              │
-│                                                              ▼              │
-│                                                     [Log: "Backup        ] │
-│                                                     [complete"           ] │
-│                                                     (O) END                │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    CRON["⏰ Cron fires every 6h"] --> SETUP["Setup:\nBACKUP_DIR, TIMESTAMP\nEnsure dir exists"]
+    SETUP --> DUMP["pg_dump:\n--format=custom --compress=9\n--no-owner --no-privileges\n| gzip"]
+    DUMP --> VERIFY["Verify integrity:\ngzip -t backup.gz"]
+    VERIFY --> INTEG{"Integrity OK?"}
+    INTEG -->|"Corrupted"| FAIL["Log ERROR\nExit code 1"]
+    INTEG -->|"Valid"| S3{"S3 configured?"}
+    S3 -->|"No S3"| SKIP["Skip S3 upload"]
+    S3 -->|"Yes"| UPLOAD["aws s3 cp\nwith SSE-KMS"]
+    SKIP --> CLEANUP["Cleanup: delete backups\nolder than RETENTION days"]
+    UPLOAD --> CLEANUP
+    CLEANUP --> DONE["Log: 'Backup complete'"]
 ```
 
 ## BPMN Diagram — Restore
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Disaster Recovery (Manual)                                             │
-│                                                                              │
-│  (O)──→[Identify incident  ]──→[Select backup:     ]──→[Stop API         ]│
-│        [and scope          ]   [latest verified    ]   [service(s)       ]│
-│                                [backup file        ]                       │
-│                                                              │              │
-│                                                              ▼              │
-│                                                    [Restore command:     ]  │
-│                                                    [gunzip -c backup.gz ]  │
-│                                                    [| pg_restore         ]  │
-│                                                    [--dbname=aegl        ]  │
-│                                                    [--clean              ]  │
-│                                                    [--if-exists          ]  │
-│                                                              │              │
-│                                                              ▼              │
-│                                                    [Run Prisma migrate  ]  │
-│                                                    [deploy (apply       ]  │
-│                                                    [pending migrations) ]  │
-│                                                              │              │
-│                                                              ▼              │
-│                                                    [Verify audit chain  ]  │
-│                                                    [GET /v1/audit/      ]  │
-│                                                    [integrity           ]  │
-│                                                              │              │
-│                                                              ▼              │
-│                                                    (X) Chain valid?         │
-│                                                     │              │        │
-│                                                [Invalid]      [Valid]      │
-│                                                     │              │        │
-│                                                     ▼              ▼        │
-│                                              [Investigate  ] [Restart API]  │
-│                                              [corruption,  ] [service(s) ]  │
-│                                              [try older    ] [Verify     ]  │
-│                                              [backup       ] [health     ]  │
-│                                                              (O) END        │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    START(["O"]) --> IDENTIFY["Identify incident\nand scope"]
+    IDENTIFY --> SELECT["Select backup:\nlatest verified file"]
+    SELECT --> STOP["Stop API service(s)"]
+    STOP --> RESTORE["Restore command:\ngunzip -c | pg_restore\n--dbname=aegl --clean"]
+    RESTORE --> MIGRATE["Run Prisma migrate deploy\n(apply pending migrations)"]
+    MIGRATE --> AUDIT["Verify audit chain\nGET /v1/audit/integrity"]
+    AUDIT --> VALID{"Chain valid?"}
+    VALID -->|"Invalid"| INVESTIGATE["Investigate corruption\ntry older backup"]
+    VALID -->|"Valid"| RESTART["Restart API service(s)\nVerify health"]
 ```
 
 ## Backup Schedule

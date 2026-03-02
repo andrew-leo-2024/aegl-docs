@@ -15,60 +15,21 @@ description: "BPMN — Automated escalation SLA expiration with fail-closed deni
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: SLA Timeout Worker                                                     │
-│                                                                              │
-│  ⏰──→[BullMQ scheduler    ]──→[Query DB:           ]──→(X) Any expired?   │
-│  5min [fires repeatable job]   [Escalation WHERE     ]    │              │  │
-│       [every 5 minutes     ]   [status IN (PENDING,  ]    │              │  │
-│                                [IN_REVIEW)           ]    │              │  │
-│                                [AND slaDeadline < now]    │              │  │
-│                                                      [None found]  [Found] │
-│                                                           │          │     │
-│                                                           ▼          ▼     │
-│                                                    [Return:     ] [FOR   ] │
-│                                                    [processed: 0] [EACH: ] │
-│                                                    (O) END                  │
-│                                                                    │       │
-│                                                                    ▼       │
-│                                                     [BEGIN TRANSACTION  ]  │
-│                                                             │              │
-│                                                             ▼              │
-│                                                     (+) Parallel writes    │
-│                                                      │         │           │
-│                                                      ▼         ▼           │
-│                                               [Update      ] [Update    ] │
-│                                               [Escalation: ] [Decision: ] │
-│                                               [status =    ] [outcome = ] │
-│                                               [TIMEOUT     ] [TIMEOUT_  ] │
-│                                               [resolvedAt =] [DENIED    ] │
-│                                               [now         ] [reason =  ] │
-│                                               [            ] ["SLA      ] │
-│                                               [            ] [expired"] ] │
-│                                                      │         │           │
-│                                                      └────┬────┘           │
-│                                                           ▼                │
-│                                                    [COMMIT TRANSACTION  ]  │
-│                                                           │                │
-│                                                           ▼                │
-│                                                    [Queue webhook:      ]  │
-│                                                    [decision.timeout    ]  │
-│                                                    [with escalation_id, ]  │
-│                                                    [decision_id, sla    ]  │
-│                                                           │                │
-│                                                           ▼                │
-│                                                    [Log: "Escalation    ]  │
-│                                                    [timed out — DENIED  ]  │
-│                                                    [(fail-closed)"      ]  │
-│                                                           │                │
-│                                                    [Next escalation...  ]  │
-│                                                                            │
-│                                                    [Return:              ] │
-│                                                    [processed: N         ] │
-│                                                    (O) END                 │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    TIMER["⏰ BullMQ scheduler\nfires every 5 min"] --> QUERY["Query DB:\nEscalation WHERE\nstatus IN (PENDING, IN_REVIEW)\nAND slaDeadline < now"]
+    QUERY --> FOUND{"Any expired?"}
+    FOUND -->|"None"| DONE0["Return: processed: 0"]
+    FOUND -->|"Found"| LOOP["FOR EACH expired escalation"]
+    LOOP --> TX["BEGIN TRANSACTION"]
+    TX --> UPD_ESC["Update Escalation:\nstatus = TIMEOUT\nresolvedAt = now"]
+    TX --> UPD_DEC["Update Decision:\noutcome = TIMEOUT_DENIED\nreason = 'SLA expired'"]
+    UPD_ESC --> COMMIT["COMMIT TRANSACTION"]
+    UPD_DEC --> COMMIT
+    COMMIT --> WH["Queue webhook:\ndecision.timeout"]
+    WH --> LOG["Log: 'Escalation timed out — DENIED (fail-closed)'"]
+    LOG --> LOOP
+    LOOP -->|"All processed"| DONEN["Return: processed: N"]
 ```
 
 ## Configuration

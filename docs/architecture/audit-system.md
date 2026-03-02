@@ -19,14 +19,11 @@ Every audit log entry contains:
 | `hash` | SHA-256 hash of `data + previousHash + sequenceNumber` |
 | `sequenceNumber` | Monotonically increasing, per-organization |
 
-```
-Genesis           Block 1           Block 2           Block N
-┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│ Hash: G  │────→│ Prev: G  │────→│ Prev: H1 │────→│ Prev: HN │
-│          │     │ Data: D1 │     │ Data: D2 │     │ Data: DN │
-│          │     │ Hash: H1 │     │ Hash: H2 │     │ Hash: HN │
-│          │     │ Seq: 1   │     │ Seq: 2   │     │ Seq: N   │
-└──────────┘     └──────────┘     └──────────┘     └──────────┘
+```mermaid
+flowchart LR
+    G["**Genesis**\nHash: G"] --> B1["**Block 1**\nPrev: G\nData: D1\nHash: H1\nSeq: 1"]
+    B1 --> B2["**Block 2**\nPrev: H1\nData: D2\nHash: H2\nSeq: 2"]
+    B2 --> BN["**Block N**\nPrev: HN-1\nData: DN\nHash: HN\nSeq: N"]
 ```
 
 ## Tamper Detection

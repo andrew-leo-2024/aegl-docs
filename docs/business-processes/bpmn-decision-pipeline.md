@@ -15,117 +15,76 @@ description: "BPMN — End-to-end AI decision governance pipeline (<10ms)"
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: AI Application                                                         │
-│                                                                              │
-│  (O)──→[AI Model generates    ]──→[App calls           ]──→[Handle         ]│
-│        [recommendation        ]   [aegl.decide()       ]   [response       ]│
-│                                    │                        │               │
-│                                    │ HTTP POST              │               │
-│                                    ▼                        │               │
-│                                   ~~~ network ~~~           │               │
-│                                                             │               │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph APP["Pool: AI Application"]
+        A1([Start]) --> A2["AI Model generates recommendation"]
+        A2 --> A3["App calls aegl.decide()"]
+        A3 -->|HTTP POST| A4["Handle response"]
+    end
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: E-AEGL API                                                             │
-│                                                                              │
-│ ┌─ Lane: Request Handling (Layer 1: Interceptor) ────────────────────────┐  │
-│ │                                                                         │  │
-│ │  (O)──→[Parse & validate  ]──→(X)──→[Extract API key ]──→(X)──→       │  │
-│ │        [request body (Zod)]   │     [from Bearer token]   │            │  │
-│ │                               │                           │            │  │
-│ │                          [INVALID]                   [AUTH FAIL]       │  │
-│ │                               │                           │            │  │
-│ │                               ▼                           ▼            │  │
-│ │                          [Return 400]              [Return 401]        │  │
-│ │                          [validation ]              [unauthorized]      │  │
-│ │                          [error     ](X)            (X)                │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                       │ [VALID + AUTHED]                     │
-│                                       ▼                                      │
-│ ┌─ Lane: Policy Evaluation (Layer 2: Policy Engine) ─────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Fetch active policies ]──→[Sort by priority ]──→[Build evaluation   ]│  │
-│ │  [for organization      ]   [(lower = first)  ]   [context from      ]│  │
-│ │                                                    [action_payload    ]│  │
-│ │                                       │                                │  │
-│ │                                       ▼                                │  │
-│ │                              [FOR EACH policy:]                        │  │
-│ │                              [  Evaluate rules ]                       │  │
-│ │                              [  against context]                       │  │
-│ │                              [  Record result  ]                       │  │
-│ │                              [  + latency_ms   ]                       │  │
-│ │                                       │                                │  │
-│ │                                       ▼                                │  │
-│ │                              [Combine results: ]                       │  │
-│ │                              [DENY > ESCALATE  ]                       │  │
-│ │                              [> PERMIT         ]                       │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                       │                                      │
-│                                       ▼                                      │
-│ ┌─ Lane: Gating (Layer 3: Action Gate) ──────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Fetch agent risk    ]──→(X)──────────────────────────────→           │  │
-│ │  [level (if agent_id) ]   │                                            │  │
-│ │                           │                                            │  │
-│ │                      ┌────┴────┬────────────┐                          │  │
-│ │                      ▼         ▼            ▼                          │  │
-│ │               [HIGH risk:] [MEDIUM risk:] [LOW risk:]                  │  │
-│ │               [escalate  ] [use policy  ] [permissive]                 │  │
-│ │               [marginals ] [outcome     ] [threshold ]                 │  │
-│ │                      │         │            │                          │  │
-│ │                      └────┬────┴────────────┘                          │  │
-│ │                           ▼                                            │  │
-│ │                    [Final outcome:]                                     │  │
-│ │                    [PERMITTED |    ]                                    │  │
-│ │                    [DENIED |       ]                                    │  │
-│ │                    [ESCALATED      ]                                    │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                       │                                      │
-│                                       ▼                                      │
-│ ┌─ Lane: Persistence (Layer 4: Audit Logger) ────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [BEGIN TRANSACTION    ]──→(+)─────────────────────────────→           │  │
-│ │                             │         │          │                      │  │
-│ │                             ▼         ▼          ▼                      │  │
-│ │                      [Create    ] [Create     ] [Create      ]         │  │
-│ │                      [Decision  ] [Policy     ] [Escalation  ]         │  │
-│ │                      [record    ] [Evaluations] [(if ESCALATED)]       │  │
-│ │                             │         │          │                      │  │
-│ │                             └────┬────┴──────────┘                      │  │
-│ │                                  ▼                                      │  │
-│ │                      [Append AuditLog entry:]                           │  │
-│ │                      [  SHA-256(contents +  ]                           │  │
-│ │                      [  previous_hash)      ]                           │  │
-│ │                      [  sequence_number++   ]                           │  │
-│ │                                  │                                      │  │
-│ │                                  ▼                                      │  │
-│ │                      [COMMIT TRANSACTION    ]                           │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                       │                                      │
-│                                       ▼                                      │
-│ ┌─ Lane: Response ───────────────────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Build response JSON  ]──→[Return HTTP 200   ]──→(O)                  │  │
-│ │  [decision_id, trace_id]   [with outcome,     ]   END                  │  │
-│ │  [outcome, evaluations ]   [evaluations,      ]                        │  │
-│ │  [latency_ms           ]   [latency_ms        ]                        │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Async Post-Processing (non-blocking) ──────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Queue webhook dispatch]──→[Log structured   ]──→(O) END             │  │
-│ │  [event to BullMQ       ]   [decision entry   ]                        │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
+    subgraph API["Pool: E-AEGL API"]
+        subgraph L1["Lane: Request Handling — Layer 1: Interceptor"]
+            B1["Parse & validate request body via Zod"] --> B2{"Valid?"}
+            B2 -->|INVALID| B3["Return 400 validation error"]
+            B2 -->|VALID| B4["Extract API key from Bearer token"]
+            B4 --> B5{"Authenticated?"}
+            B5 -->|AUTH FAIL| B6["Return 401 unauthorized"]
+        end
+
+        B5 -->|VALID + AUTHED| C1
+
+        subgraph L2["Lane: Policy Evaluation — Layer 2: Policy Engine"]
+            C1["Fetch active policies for organization"]
+            C1 --> C2["Sort by priority — lower = first"]
+            C2 --> C3["Build evaluation context from action_payload"]
+            C3 --> C4["FOR EACH policy: evaluate rules against context, record result + latency_ms"]
+            C4 --> C5["Combine results: DENY > ESCALATE > PERMIT"]
+        end
+
+        C5 --> D1
+
+        subgraph L3["Lane: Gating — Layer 3: Action Gate"]
+            D1["Fetch agent risk level if agent_id present"]
+            D1 --> D2{"Agent Risk Level?"}
+            D2 -->|HIGH| D3["Escalate marginals"]
+            D2 -->|MEDIUM| D4["Use policy outcome"]
+            D2 -->|LOW| D5["Permissive threshold"]
+            D3 --> D6["Final outcome: PERMITTED | DENIED | ESCALATED"]
+            D4 --> D6
+            D5 --> D6
+        end
+
+        D6 --> E1
+
+        subgraph L4["Lane: Persistence — Layer 4: Audit Logger"]
+            E1["BEGIN TRANSACTION"]
+            E1 --> E2["Create Decision record"]
+            E1 --> E3["Create Policy Evaluations"]
+            E1 --> E4["Create Escalation if ESCALATED"]
+            E2 --> E5["Append AuditLog entry: SHA-256 contents + previous_hash, sequence_number++"]
+            E3 --> E5
+            E4 --> E5
+            E5 --> E6["COMMIT TRANSACTION"]
+        end
+
+        E6 --> F1
+
+        subgraph L5["Lane: Response"]
+            F1["Build response JSON: decision_id, trace_id, outcome, evaluations, latency_ms"]
+            F1 --> F2["Return HTTP 200"]
+            F2 --> F3([End])
+        end
+
+        subgraph L6["Lane: Async Post-Processing — non-blocking"]
+            G1["Queue webhook dispatch event to BullMQ"]
+            G1 --> G2["Log structured decision entry"]
+            G2 --> G3([End])
+        end
+    end
+
+    A3 --> B1
+    E6 --> G1
 ```
 
 ## Process Steps

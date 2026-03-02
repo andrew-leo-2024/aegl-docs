@@ -15,82 +15,39 @@ description: "BPMN — Asynchronous webhook delivery with HMAC signing and retry
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Event Source (Decision route / Escalation route / SLA worker)           │
-│                                                                              │
-│  (O)──→[Governance event    ]──→[Call dispatch       ]──→(O) END            │
-│        [occurs (decision    ]   [WebhookEvent()      ]   (non-blocking)     │
-│        [created, escalation ]   [with event type     ]                       │
-│        [resolved, timeout)  ]   [and payload data    ]                       │
-│                                                                              │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Webhook Dispatcher                                                     │
-│                                                                              │
-│ ┌─ Lane: Event Routing ─────────────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Query Webhook table    ]──→(X) Any active subscribers?               │  │
-│ │  [WHERE org_id = org     ]    │                      │                 │  │
-│ │  [AND active = true      ]    │                      │                 │  │
-│ │  [AND events includes    ] [None subscribed]   [Subscribers found]     │  │
-│ │  [current event type     ]    │                      │                 │  │
-│ │                               ▼                      ▼                 │  │
-│ │                          (O) END              [Generate metadata:]     │  │
-│ │                          (no-op)              [idempotency_key = UUID] │  │
-│ │                                               [timestamp = now()    ] │  │
-│ │                                                      │                 │  │
-│ │                                                      ▼                 │  │
-│ │                                               [FOR EACH webhook:    ] │  │
-│ │                                               [Queue BullMQ job     ] │  │
-│ │                                               [attempts: 3          ] │  │
-│ │                                               [backoff: exponential ] │  │
-│ │                                               [(5s, 25s, 125s)      ] │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                       │                                      │
-│                                       ▼                                      │
-│ ┌─ Lane: Delivery Worker (BullMQ) ──────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Dequeue job           ]──→[Lookup webhook    ]──→(X) Still active?  │  │
-│ │  [from queue            ]   [by webhookId      ]    │              │   │  │
-│ │                                                [Inactive]    [Active]  │  │
-│ │                                                     │            │     │  │
-│ │                                                     ▼            ▼     │  │
-│ │                                              [Skip delivery] [Sign   ] │  │
-│ │                                              [return: false] [payload:] │  │
-│ │                                              (O) END        [HMAC-   ] │  │
-│ │                                                             [SHA256  ] │  │
-│ │                                                             [with    ] │  │
-│ │                                                             [secret  ] │  │
-│ │                                                                  │     │  │
-│ │                                                                  ▼     │  │
-│ │                                                      [HTTP POST to   ] │  │
-│ │                                                      [webhook.url    ] │  │
-│ │                                                      [Headers:       ] │  │
-│ │                                                      [ X-AEGL-       ] │  │
-│ │                                                      [  Signature    ] │  │
-│ │                                                      [ X-AEGL-Event  ] │  │
-│ │                                                      [ X-AEGL-       ] │  │
-│ │                                                      [  Delivery     ] │  │
-│ │                                                      [Timeout: 10s   ] │  │
-│ │                                                           │            │  │
-│ │                                                           ▼            │  │
-│ │                                                  (X) Response?         │  │
-│ │                                                   │            │       │  │
-│ │                                              [2xx: OK]   [Error/      │  │
-│ │                                                   │       timeout]     │  │
-│ │                                                   ▼            │       │  │
-│ │                                            [Log: delivered]    ▼       │  │
-│ │                                            [return: true  ] [Throw   ]│  │
-│ │                                            (O) END         [error →  ]│  │
-│ │                                                            [BullMQ   ]│  │
-│ │                                                            [retries  ]│  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph Pool1["Pool: Event Source"]
+        A([Start]) --> B["Governance event occurs\n(decision created,\nescalation resolved, timeout)"]
+        B --> C["Call dispatchWebhookEvent()\nwith event type and payload"]
+        C --> D1([End: non-blocking])
+    end
+
+    C -.-> E
+
+    subgraph Pool2["Pool: Webhook Dispatcher"]
+        subgraph Lane1["Lane: Event Routing"]
+            E["Query Webhook table\nWHERE org_id = org\nAND active = true\nAND events includes type"] --> F{Any active\nsubscribers?}
+            F -- None subscribed --> G([End: no-op])
+            F -- Subscribers found --> H["Generate metadata:\nidempotency_key = UUID\ntimestamp = now()"]
+            H --> I["FOR EACH webhook:\nQueue BullMQ job\nattempts: 3\nbackoff: exponential\n5s / 25s / 125s"]
+        end
+
+        I --> J
+
+        subgraph Lane2["Lane: Delivery Worker - BullMQ"]
+            J["Dequeue job from queue"] --> K["Lookup webhook by webhookId"]
+            K --> L{Still active?}
+            L -- Inactive --> M["Skip delivery\nreturn: false"]
+            M --> N1([End])
+            L -- Active --> O["Sign payload:\nHMAC-SHA256 with secret"]
+            O --> P["HTTP POST to webhook.url\nHeaders: X-AEGL-Signature,\nX-AEGL-Event, X-AEGL-Delivery\nTimeout: 10s"]
+            P --> Q{Response?}
+            Q -- "2xx: OK" --> R["Log: delivered\nreturn: true"]
+            R --> S1([End])
+            Q -- "Error / timeout" --> T["Throw error\n--> BullMQ retries"]
+        end
+    end
 ```
 
 ## Event Types

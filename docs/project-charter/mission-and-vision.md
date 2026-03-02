@@ -35,16 +35,13 @@ E-AEGL is building the control plane for the AI economy. Our thesis:
 
 ## Three Horizons
 
-```
- YEAR 1-2                YEAR 2-3               YEAR 3-5
-┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
-│ AI Decision │     │  Agent       │     │  Trust Protocol   │
-│ Governance  │────→│  Runtime     │────→│  (AIDCP)          │
-│ (Wedge)     │     │  (AgentOS)   │     │  Industry Standard│
-└─────────────┘     └──────────────┘     └──────────────────┘
-  50 enterprises      SDK → Runtime        Decision Exchange
-  100M dec/month      In-process eval      Cross-org trust
-  SOC 2 certified     Agent lifecycle      Protocol standard
+```mermaid
+flowchart LR
+    H1["**YEAR 1-2**\nAI Decision Governance\n(Wedge)\n---\n50 enterprises\n100M dec/month\nSOC 2 certified"]
+    H2["**YEAR 2-3**\nAgent Runtime\n(AgentOS)\n---\nSDK → Runtime\nIn-process eval\nAgent lifecycle"]
+    H3["**YEAR 3-5**\nTrust Protocol\n(AIDCP)\n---\nDecision Exchange\nCross-org trust\nProtocol standard"]
+
+    H1 --> H2 --> H3
 ```
 
 ### Horizon 1: AI Decision Governance (Current)

@@ -14,66 +14,28 @@ description: "BPMN — Usage-based billing, plan limits, and Stripe integration"
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Usage Metering (per decision)                                          │
-│                                                                              │
-│  (O)──→[Decision processed ]──→[Increment in-memory]──→(X) Flush         │
-│        [successfully       ]   [counter for org     ]   threshold?          │
-│                                                          │          │       │
-│                                                    [Not yet]   [Threshold] │
-│                                                          │     [reached  ] │
-│                                                          ▼          │       │
-│                                                    (O) END         ▼       │
-│                                                            [Flush to DB:  ]│
-│                                                            [Update usage  ]│
-│                                                            [record for    ]│
-│                                                            [billing period]│
-│                                                            (O) END         │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph METERING["Pool: Usage Metering (per decision)"]
+        M1(["O"]) --> M2["Decision processed\nsuccessfully"]
+        M2 --> M3["Increment in-memory\ncounter for org"]
+        M3 --> M4{"Flush threshold?"}
+        M4 -->|"Not yet"| M_END(["END"])
+        M4 -->|"Threshold reached"| M5["Flush to DB:\nUpdate usage record\nfor billing period"]
+        M5 --> M_END2(["END"])
+    end
 
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Billing Cycle (monthly)                                                │
-│                                                                              │
-│  ⏰──→[Period end trigger  ]──→[Calculate usage     ]──→(X) Plan type     │
-│  1st  [1st of month        ]   [for completed period]    │              │   │
-│  of                                                 [SelfHosted]   [Cloud] │
-│  month                                                   │          │      │
-│                                                          ▼          ▼      │
-│                                                    [Skip billing] [Lookup ]│
-│                                                    [(license-   ] [Stripe ]│
-│                                                    [based)      ] [sub    ]│
-│                                                    (O) END            │    │
-│                                                                       ▼    │
-│                                                              (X) Over limit?│
-│                                                               │          │  │
-│                                                          [Within]   [Over] │
-│                                                          [plan  ]   [limit]│
-│                                                               │          │  │
-│                                                               ▼          ▼  │
-│                                                        [No overage ] [Calc] │
-│                                                        [charge     ] [over:]│
-│                                                        (O) END      [usage]│
-│                                                                      [  - ]│
-│                                                                      [plan]│
-│                                                                      [lim ]│
-│                                                                        │   │
-│                                                                        ▼   │
-│                                                              [Report to ]  │
-│                                                              [Stripe:   ]  │
-│                                                              [overage × ]  │
-│                                                              [$0.001    ]  │
-│                                                              [per       ]  │
-│                                                              [decision  ]  │
-│                                                                   │        │
-│                                                                   ▼        │
-│                                                              [Stripe auto]│
-│                                                              [charges on ]│
-│                                                              [next cycle ]│
-│                                                              (O) END      │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+    subgraph BILLING["Pool: Billing Cycle (monthly)"]
+        B1["⏰ 1st of month"] --> B2["Calculate usage\nfor completed period"]
+        B2 --> B3{"Plan type?"}
+        B3 -->|"Self-Hosted"| B_SKIP["Skip billing\n(license-based)"]
+        B3 -->|"Cloud"| B4["Lookup Stripe subscription"]
+        B4 --> B5{"Over limit?"}
+        B5 -->|"Within plan"| B_OK["No overage charge"]
+        B5 -->|"Over limit"| B6["Calculate overage:\nusage - plan limit"]
+        B6 --> B7["Report to Stripe:\noverage × $0.001/decision"]
+        B7 --> B8["Stripe auto-charges\non next cycle"]
+    end
 ```
 
 ## Plan Limits

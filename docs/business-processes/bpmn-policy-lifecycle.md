@@ -14,85 +14,55 @@ description: "BPMN — Policy creation, versioning, activation, and deactivation
 
 ## BPMN Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: Policy Author (MRM / Risk Manager / Engineer)                          │
-│                                                                              │
-│ ┌─ Lane: Create via YAML (CLI) ─────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  (O)──→[Write policy YAML  ]──→[aegl policies     ]──→[POST /v1/     ]│  │
-│ │        [loan-limits.yaml   ]   [apply -f policy.yaml]  [policies      ]│  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Create via Dashboard ───────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  (O)──→[Open Policy Editor ]──→[Configure rules   ]──→[POST /v1/     ]│  │
-│ │        [/policies/new      ]   [via rule builder   ]   [policies      ]│  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Pool: E-AEGL API                                                             │
-│                                                                              │
-│ ┌─ Lane: Policy Creation ────────────────────────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [Validate request   ]──→[Check policies:write]──→[Create Policy v1  ]│  │
-│ │  [Zod schema:        ]   [permission          ]   [version = 1       ]│  │
-│ │  [name, type, rules, ]                            [parentId = null   ]│  │
-│ │  [priority, scope    ]                            [active = true     ]│  │
-│ │                                                    [store rules JSON ]│  │
-│ │                                                           │           │  │
-│ │                                                           ▼           │  │
-│ │                                                    [Return 201       ]│  │
-│ │                                                    [with policy obj  ]│  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Policy Update (Immutable Versioning) ───────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [PUT /v1/policies/:id]──→(X)──→[Fetch existing    ]──→               │  │
-│ │                            │     [policy            ]                   │  │
-│ │                       [Not found]                                       │  │
-│ │                            │         │ [Found + Active]                 │  │
-│ │                            ▼         ▼                                  │  │
-│ │                       [Return 404]                                      │  │
-│ │                                                                         │  │
-│ │  [BEGIN TRANSACTION   ]──→[Deactivate old:     ]──→[Create new:      ]│  │
-│ │                            [active = false      ]   [version = v+1   ]│  │
-│ │                            [updatedAt = now     ]   [parentId = old  ]│  │
-│ │                                                     [active = true   ]│  │
-│ │                                                     [new rules       ]│  │
-│ │                                                           │           │  │
-│ │                                                           ▼           │  │
-│ │                                                    [COMMIT           ]│  │
-│ │                                                    [Return 201       ]│  │
-│ │                                                    [new policy obj   ]│  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-│                                                                              │
-│ ┌─ Lane: Policy Deactivation (Soft Delete) ──────────────────────────────┐  │
-│ │                                                                         │  │
-│ │  [DELETE /v1/         ]──→[Set active = false  ]──→[Return 204       ]│  │
-│ │  [policies/:id       ]   [Record deactivation ]   [No Content       ]│  │
-│ │                           [in audit log        ]                       │  │
-│ │                                                                         │  │
-│ └─────────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph AUTHOR["Pool: Policy Author"]
+        subgraph CLI["Lane: Create via YAML (CLI)"]
+            Y1(["O"]) --> Y2["Write policy YAML\nloan-limits.yaml"]
+            Y2 --> Y3["aegl policies\napply -f policy.yaml"]
+            Y3 --> Y4["POST /v1/policies"]
+        end
+        subgraph DASH["Lane: Create via Dashboard"]
+            D1(["O"]) --> D2["Open Policy Editor\n/policies/new"]
+            D2 --> D3["Configure rules\nvia rule builder"]
+            D3 --> D4["POST /v1/policies"]
+        end
+    end
+
+    Y4 --> API_CREATE
+    D4 --> API_CREATE
+
+    subgraph API["Pool: E-AEGL API"]
+        subgraph CREATION["Lane: Policy Creation"]
+            API_CREATE["Validate request\nZod schema"] --> PERM["Check policies:write"]
+            PERM --> CREATE["Create Policy v1\nversion=1, active=true\nparentId=null"]
+            CREATE --> RET201["Return 201\nwith policy obj"]
+        end
+
+        subgraph UPDATE["Lane: Policy Update (Immutable Versioning)"]
+            UPD["PUT /v1/policies/:id"] --> FETCH{"Fetch existing policy"}
+            FETCH -->|"Not found"| RET404["Return 404"]
+            FETCH -->|"Found + Active"| TX["BEGIN TRANSACTION"]
+            TX --> DEACT["Deactivate old\nactive=false"]
+            TX --> NEW["Create new\nversion=v+1, parentId=old\nactive=true"]
+            NEW --> COMMIT["COMMIT\nReturn 201"]
+        end
+
+        subgraph DELETE["Lane: Policy Deactivation (Soft Delete)"]
+            DEL["DELETE /v1/policies/:id"] --> SOFT["Set active=false\nRecord in audit log"]
+            SOFT --> RET204["Return 204"]
+        end
+    end
 ```
 
 ## Version Chain
 
 Policies are **never mutated**. Each update creates a new version linked to the previous:
 
-```
-Policy v1 (active=false)  ──parentId──→  null
-    │
-    └── Policy v2 (active=false)  ──parentId──→  v1.id
-            │
-            └── Policy v3 (active=true)   ──parentId──→  v2.id
+```mermaid
+flowchart LR
+    V1["Policy v1\n(active=false)\nparentId → null"] --> V2["Policy v2\n(active=false)\nparentId → v1.id"]
+    V2 --> V3["Policy v3\n(active=true)\nparentId → v2.id"]
 ```
 
 **Why immutable versioning?**
