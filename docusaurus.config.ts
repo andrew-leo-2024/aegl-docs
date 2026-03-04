@@ -11,8 +11,8 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://andrew-leo-2024.github.io',
-  baseUrl: '/aegl-docs/',
+  url: 'https://docs.aegl.io',
+  baseUrl: '/',
 
   organizationName: 'andrew-leo-2024',
   projectName: 'aegl-docs',
